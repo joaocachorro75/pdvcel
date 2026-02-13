@@ -1,0 +1,7 @@
+{
+  "name": "PDV de Celular",
+  "description": "Um sistema de PDV completo e simplificado para pequenos negócios, com gestão de estoque, vendas, QR Code Pix e recibos compartilháveis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

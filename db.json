@@ -1,0 +1,11 @@
+
+{
+  "settings": {
+    "shopName": "SMART PDV",
+    "shopLogo": "https://picsum.photos/seed/shop/200/200",
+    "adminPassword": "admin",
+    "pixKey": "seu-pix-aqui@pix.com.br"
+  },
+  "products": [],
+  "sales": []
+}
