@@ -7,8 +7,11 @@ WORKDIR /app
 # Copia os arquivos do projeto para o container
 COPY . .
 
-# Inicializa o package.json se não existir e instala o express
-RUN if [ ! -f package.json ]; then npm init -y; fi && \
+# Inicializa o package.json se não existir, define como module e instala o express
+RUN if [ ! -f package.json ]; then \
+      npm init -y && \
+      sed -i 's/"main": "index.js"/"type": "module"/g' package.json; \
+    fi && \
     npm install express
 
 # Garante que o container possa escrever no diretório (necessário para db.json no Easypanel)
