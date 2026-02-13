@@ -1,16 +1,21 @@
 
 FROM node:20-slim
 
+# Define o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos do projeto
+# Copia os arquivos do projeto para o container
 COPY . .
 
-# Instala o express para o backend
-RUN npm init -y && npm install express
+# Inicializa o package.json se não existir e instala o express
+RUN if [ ! -f package.json ]; then npm init -y; fi && \
+    npm install express
 
-# Expõe a porta do Easypanel
+# Garante que o container possa escrever no diretório (necessário para db.json no Easypanel)
+RUN chmod -R 777 /app
+
+# Expõe a porta 3000
 EXPOSE 3000
 
-# Comando para rodar o servidor
+# Comando para iniciar o servidor Node
 CMD ["node", "server.js"]

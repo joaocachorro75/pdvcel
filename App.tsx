@@ -10,44 +10,57 @@ import SettingsPage from './pages/SettingsPage';
 import Layout from './components/Layout';
 import { Product, Sale, Settings } from './types';
 
-const INITIAL_SETTINGS: Settings = {
-  shopName: 'SmartPDV Carregando...',
-  shopLogo: 'https://picsum.photos/seed/shop/200/200',
+const DEFAULT_SETTINGS: Settings = {
+  shopName: 'MEU PDV MODERNO',
+  shopLogo: 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png',
   adminPassword: 'admin',
-  pixKey: ''
+  pixKey: 'seu-pix-aqui@pix.com'
 };
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Carregar dados do Banco JSON ao iniciar
+  // 1. Inicialização: Tenta carregar do Servidor, senão usa LocalStorage
   useEffect(() => {
-    const fetchData = async () => {
+    const initApp = async () => {
       try {
         const response = await fetch('/api/db');
-        const data = await response.json();
-        
-        if (data.settings) setSettings(data.settings);
-        if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
-        if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
-        
-        setIsLoading(false);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.settings) setSettings(data.settings);
+          if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
+          if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
+          console.log("Dados sincronizados com o servidor.");
+        } else {
+          loadFromLocal();
+        }
       } catch (error) {
-        console.error("Erro ao carregar banco JSON:", error);
+        console.warn("Servidor não detectado (modo local/preview).");
+        loadFromLocal();
+      } finally {
         setIsLoading(false);
       }
     };
-    fetchData();
+
+    const loadFromLocal = () => {
+      const savedSettings = localStorage.getItem('pdv_settings');
+      if (savedSettings) setSettings(JSON.parse(savedSettings));
+    };
+
+    initApp();
   }, []);
 
-  // Sincronizar qualquer mudança de volta para o servidor
-  const syncWithServer = async (newSettings?: Settings) => {
-    const currentSettings = newSettings || settings;
+  // 2. Sincronização: Salva dados no servidor quando houver mudanças importantes
+  const syncWithServer = async (updatedSettings?: Settings) => {
+    const currentSettings = updatedSettings || settings;
     const products = JSON.parse(localStorage.getItem('pdv_products') || '[]');
     const sales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
     
+    // Salva no local por garantia imediata
+    localStorage.setItem('pdv_settings', JSON.stringify(currentSettings));
+
     try {
       await fetch('/api/db', {
         method: 'POST',
@@ -58,13 +71,14 @@ const App: React.FC = () => {
           sales
         })
       });
+      console.log("Mudanças salvas no servidor.");
     } catch (error) {
-      console.error("Erro na sincronização:", error);
+      console.warn("Falha ao sincronizar com servidor (venda salva apenas localmente).");
     }
   };
 
   const handleLogin = (password: string) => {
-    if (password.trim() === settings.adminPassword) {
+    if (password === settings.adminPassword) {
       setIsAuthenticated(true);
       return true;
     }
@@ -75,26 +89,12 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
   };
 
-  const updateSettings = (newSettings: Settings | ((prev: Settings) => Settings)) => {
-    setSettings(prev => {
-      const next = typeof newSettings === 'function' ? newSettings(prev) : newSettings;
-      localStorage.setItem('pdv_settings', JSON.stringify(next));
-      // Dispara sync após o update do estado
-      setTimeout(() => syncWithServer(next), 100);
-      return next;
-    });
+  const updateSettings = (newSettings: Settings) => {
+    setSettings(newSettings);
+    syncWithServer(newSettings);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-indigo-600 text-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="font-bold">Iniciando SmartPDV...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return null; // O HTML já tem um loader básico
 
   return (
     <HashRouter>
