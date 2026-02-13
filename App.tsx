@@ -22,9 +22,11 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Inicialização: Tenta carregar do Servidor, senão usa LocalStorage
   useEffect(() => {
     const initApp = async () => {
+      // Pequeno delay para garantir que o DOM esteja pronto
+      await new Promise(r => setTimeout(r, 500));
+      
       try {
         const response = await fetch('/api/db');
         if (response.ok) {
@@ -32,12 +34,12 @@ const App: React.FC = () => {
           if (data.settings) setSettings(data.settings);
           if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
           if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
-          console.log("Dados sincronizados com o servidor.");
+          console.log("Sincronizado com servidor.");
         } else {
           loadFromLocal();
         }
       } catch (error) {
-        console.warn("Servidor não detectado (modo local/preview).");
+        console.warn("Servidor offline, carregando localmente.");
         loadFromLocal();
       } finally {
         setIsLoading(false);
@@ -52,13 +54,11 @@ const App: React.FC = () => {
     initApp();
   }, []);
 
-  // 2. Sincronização: Salva dados no servidor quando houver mudanças importantes
   const syncWithServer = async (updatedSettings?: Settings) => {
     const currentSettings = updatedSettings || settings;
     const products = JSON.parse(localStorage.getItem('pdv_products') || '[]');
     const sales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
     
-    // Salva no local por garantia imediata
     localStorage.setItem('pdv_settings', JSON.stringify(currentSettings));
 
     try {
@@ -71,9 +71,8 @@ const App: React.FC = () => {
           sales
         })
       });
-      console.log("Mudanças salvas no servidor.");
     } catch (error) {
-      console.warn("Falha ao sincronizar com servidor (venda salva apenas localmente).");
+      console.warn("Erro ao salvar no servidor.");
     }
   };
 
@@ -94,7 +93,7 @@ const App: React.FC = () => {
     syncWithServer(newSettings);
   };
 
-  if (isLoading) return null; // O HTML já tem um loader básico
+  if (isLoading) return null;
 
   return (
     <HashRouter>
