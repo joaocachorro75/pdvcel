@@ -8,8 +8,7 @@ import {
   Image as ImageIcon,
   X,
   Package,
-  Camera,
-  RefreshCw
+  Camera
 } from 'lucide-react';
 import { Product } from '../types';
 
@@ -26,6 +25,7 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -38,6 +38,7 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
   useEffect(() => {
     const saved = localStorage.getItem('pdv_products');
     if (saved) setProducts(JSON.parse(saved));
+    return () => stopCamera();
   }, []);
 
   const saveToStorage = (newProducts: Product[]) => {
@@ -69,37 +70,42 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
   };
 
   const startCamera = async () => {
-    setShowCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' } 
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      streamRef.current = stream;
+      setShowCamera(true);
+      // Timeout para garantir que o elemento video já renderizou
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
     } catch (err) {
       console.error("Erro ao acessar câmera:", err);
-      alert("Não foi possível acessar a câmera.");
-      setShowCamera(false);
+      alert("Permissão de câmera negada ou dispositivo não encontrado.");
     }
   };
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     setShowCamera(false);
   };
 
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
       if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0);
-        const imageData = canvasRef.current.toDataURL('image/jpeg');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
         setFormData(prev => ({ ...prev, image: imageData }));
         stopCamera();
       }
@@ -194,12 +200,6 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
             </div>
           </div>
         ))}
-        {filteredProducts.length === 0 && (
-          <div className="py-20 text-center opacity-40">
-            <Package className="mx-auto mb-2" size={48} />
-            <p className="text-sm font-bold">Estoque vazio</p>
-          </div>
-        )}
       </div>
 
       {isModalOpen && (
@@ -214,7 +214,7 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
               <div className="flex flex-col items-center gap-3">
                 {showCamera ? (
                   <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
-                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                     <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3">
                       <button type="button" onClick={takePhoto} className="bg-white text-slate-900 p-3 rounded-full shadow-lg">
                         <Camera size={24} />
@@ -234,7 +234,7 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
                       <button type="button" onClick={startCamera} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm">
                         <Camera size={18} /> Usar Câmera
                       </button>
-                      <p className="text-[10px] text-slate-400 max-w-[150px]">Toque no quadrado para escolher um arquivo ou use a câmera.</p>
+                      <p className="text-[10px] text-slate-400 max-w-[150px]">Toque para escolher arquivo ou use a câmera para capturar agora.</p>
                     </div>
                   </div>
                 )}
@@ -244,35 +244,29 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
               <div className="space-y-3">
                 <input 
                   placeholder="Nome do Produto" 
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                   value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} required
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Preço R$</label>
-                    <input 
-                      placeholder="0.00" type="number" step="0.01"
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      value={formData.price} onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))} required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Qtd Estoque</label>
-                    <input 
-                      placeholder="0" type="number"
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      value={formData.stock} onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))} required
-                    />
-                  </div>
+                  <input 
+                    placeholder="Preço R$" type="number" step="0.01"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    value={formData.price} onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))} required
+                  />
+                  <input 
+                    placeholder="Estoque" type="number"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    value={formData.stock} onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))} required
+                  />
                 </div>
                 <input 
-                  placeholder="Categoria (Ex: Bebidas, Lanches)" 
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Categoria" 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                   value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))} required
                 />
               </div>
 
-              <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 active:scale-95 transition-all mt-4">
+              <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl">
                 Salvar Produto
               </button>
             </form>
