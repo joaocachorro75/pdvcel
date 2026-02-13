@@ -63,8 +63,9 @@ app.post('/api/db', (req, res) => {
 });
 
 // Rota de fallback para SPA (Single Page Application)
-// No Express 5, o '*' sozinho causa erro. Usamos a sintaxe '(.*)' para capturar tudo.
-app.get('(.*)', (req, res) => {
+// No Express 5 (path-to-regexp v8), parâmetros curinga devem ser nomeados.
+// Usamos /:path* para capturar qualquer rota e redirecionar para o index.html.
+app.get('/:path*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
