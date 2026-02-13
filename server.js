@@ -1,4 +1,3 @@
-
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -13,7 +12,7 @@ const DB_PATH = path.join(__dirname, 'db.json');
 
 app.use(express.json({ limit: '50mb' }));
 
-// Middleware para servir arquivos estáticos
+// Middleware para servir arquivos estáticos (CSS, JS, Imagens)
 app.use(express.static(__dirname));
 
 // Função para garantir que o BD JSON exista com dados iniciais
@@ -31,7 +30,7 @@ const initDB = () => {
     };
     try {
       fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2));
-      console.log("Banco de dados db.json criado com sucesso.");
+      console.log("Banco de dados db.json inicializado.");
     } catch (err) {
       console.error("Erro ao criar db.json:", err);
     }
@@ -62,13 +61,16 @@ app.post('/api/db', (req, res) => {
   }
 });
 
-// Rota de fallback para SPA (Single Page Application)
-// No Express 5 (path-to-regexp v8), parâmetros curinga devem ser nomeados.
-// Usamos /:path* para capturar qualquer rota e redirecionar para o index.html.
-app.get('/:path*', (req, res) => {
+/**
+ * SPA Fallback: 
+ * Em vez de app.get('*'), usamos um middleware no final.
+ * Isso captura qualquer requisição que não tenha batido nas rotas acima (estáticos ou API)
+ * e entrega o index.html, permitindo que o React Router assuma o controle.
+ */
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`SmartPDV Online na porta ${PORT}`);
+  console.log(`SmartPDV rodando na porta ${PORT}`);
 });
