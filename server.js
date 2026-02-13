@@ -12,6 +12,8 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'db.json');
 
 app.use(express.json({ limit: '50mb' }));
+
+// Middleware para servir arquivos estáticos
 app.use(express.static(__dirname));
 
 // Função para garantir que o BD JSON exista com dados iniciais
@@ -61,7 +63,8 @@ app.post('/api/db', (req, res) => {
 });
 
 // Rota de fallback para SPA (Single Page Application)
-app.get('*', (req, res) => {
+// No Express 5, o '*' sozinho causa erro. Usamos a sintaxe '(.*)' para capturar tudo.
+app.get('(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
