@@ -1,4 +1,3 @@
-
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -13,7 +12,7 @@ const DB_PATH = path.join(__dirname, 'db.json');
 
 app.use(express.json({ limit: '50mb' }));
 
-// 1. Servir arquivos estáticos primeiro
+// 1. Servir arquivos estáticos (prioridade)
 app.use(express.static(__dirname));
 
 // Função para garantir que o BD JSON exista
@@ -39,7 +38,7 @@ const initDB = () => {
 
 initDB();
 
-// 2. Rotas da API
+// 2. Rotas da API explicitas
 app.get('/api/db', (req, res) => {
   try {
     const data = fs.readFileSync(DB_PATH, 'utf8');
@@ -58,15 +57,18 @@ app.post('/api/db', (req, res) => {
   }
 });
 
-// 3. Fallback para SPA (DEVE ser a última coisa)
-// No Express 5, evitamos app.get('*') se houver erro de path-to-regexp.
-// app.use sem path funciona como um catch-all seguro.
-app.use((req, res, next) => {
-  // Se for uma requisição de arquivo que não existe, ou rota de navegação, manda o index.html
+// 3. Fallback seguro para SPA no Express 5
+// Usamos uma expressão regular simples (.*) ou apenas um middleware catch-all
+app.get(/^(?!\/api).+/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Caso nada acima tenha funcionado (último recurso)
+app.use((req, res) => {
   if (req.method === 'GET' && !req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, 'index.html'));
   } else {
-    next();
+    res.status(404).send('Not Found');
   }
 });
 
