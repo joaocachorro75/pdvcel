@@ -65,12 +65,23 @@ if (fs.existsSync(distPath)) {
   console.log('Servindo arquivos de:', __dirname);
 }
 
-// SPA fallback - todas as rotas não-API vão para index.html
-app.get('*', (req, res) => {
+// SPA fallback - usar middleware ao invés de rota com wildcard
+// Express 5 não aceita app.get('*')
+app.use((req, res, next) => {
+  // Ignora rotas de API
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  
   const indexPath = fs.existsSync(distPath) 
     ? path.join(distPath, 'index.html')
     : path.join(__dirname, 'index.html');
-  res.sendFile(indexPath);
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('Arquivo não encontrado');
+  }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
