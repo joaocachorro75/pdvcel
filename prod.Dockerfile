@@ -1,29 +1,35 @@
-FROM node:20-slim
+# Stage 1: Build
+FROM node:20-slim AS builder
 
-# Define o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos do projeto para o container
+# Copia package.json e instala dependências
 COPY package.json ./
-COPY package-lock.json* ./
-
-# Instala TODAS as dependências (incluindo devDependencies para build)
 RUN npm install
 
-# Copia o restante dos arquivos
+# Copia o resto dos arquivos
 COPY . .
 
-# FAZ O BUILD DO VITE (gera pasta dist/)
+# Faz o build do Vite
 RUN npm run build
 
-# Remove devDependencies para reduzir tamanho
-RUN npm prune --production
+# Stage 2: Production
+FROM node:20-slim
 
-# Garante que o container possa escrever no diretório (necessário para db.json)
+WORKDIR /app
+
+# Copia arquivos do build
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/db.json ./
+COPY --from=builder /app/server.js ./
+
+# Garante permissão de escrita
 RUN chmod -R 777 /app
 
-# Expõe a porta 3000
+# Expõe a porta
 EXPOSE 3000
 
-# Comando para iniciar o servidor Node
+# Inicia o servidor
 CMD ["node", "server.js"]
