@@ -12,9 +12,6 @@ const DB_PATH = path.join(__dirname, 'db.json');
 
 app.use(express.json({ limit: '50mb' }));
 
-// 1. Servir arquivos estáticos (prioridade)
-app.use(express.static(__dirname));
-
 // Função para garantir que o BD JSON exista
 const initDB = () => {
   if (!fs.existsSync(DB_PATH)) {
@@ -38,7 +35,7 @@ const initDB = () => {
 
 initDB();
 
-// 2. Rotas da API explicitas
+// API Routes - ANTES dos arquivos estáticos
 app.get('/api/db', (req, res) => {
   try {
     const data = fs.readFileSync(DB_PATH, 'utf8');
@@ -57,21 +54,27 @@ app.post('/api/db', (req, res) => {
   }
 });
 
-// 3. Fallback seguro para SPA no Express 5
-// Usamos uma expressão regular simples (.*) ou apenas um middleware catch-all
-app.get(/^(?!\/api).+/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Servir arquivos estáticos da pasta dist (build do Vite)
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  console.log('Servindo arquivos de:', distPath);
+} else {
+  // Fallback: servir da raiz se não houver dist
+  app.use(express.static(__dirname));
+  console.log('Servindo arquivos de:', __dirname);
+}
 
-// Caso nada acima tenha funcionado (último recurso)
-app.use((req, res) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'index.html'));
-  } else {
-    res.status(404).send('Not Found');
-  }
+// SPA fallback - todas as rotas não-API vão para index.html
+app.get('*', (req, res) => {
+  const indexPath = fs.existsSync(distPath) 
+    ? path.join(distPath, 'index.html')
+    : path.join(__dirname, 'index.html');
+  res.sendFile(indexPath);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+  console.log('Dist path:', distPath);
+  console.log('Dist exists:', fs.existsSync(distPath));
 });

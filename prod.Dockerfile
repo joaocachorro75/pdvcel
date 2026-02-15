@@ -1,20 +1,25 @@
-
 FROM node:20-slim
 
 # Define o diretório de trabalho
 WORKDIR /app
 
 # Copia os arquivos do projeto para o container
+COPY package.json ./
+COPY package-lock.json* ./
+
+# Instala TODAS as dependências (incluindo devDependencies para build)
+RUN npm install
+
+# Copia o restante dos arquivos
 COPY . .
 
-# Inicializa o package.json se não existir, define como module e instala o express
-RUN if [ ! -f package.json ]; then \
-      npm init -y && \
-      sed -i 's/"main": "index.js"/"type": "module"/g' package.json; \
-    fi && \
-    npm install express
+# FAZ O BUILD DO VITE (gera pasta dist/)
+RUN npm run build
 
-# Garante que o container possa escrever no diretório (necessário para db.json no Easypanel)
+# Remove devDependencies para reduzir tamanho
+RUN npm prune --production
+
+# Garante que o container possa escrever no diretório (necessário para db.json)
 RUN chmod -R 777 /app
 
 # Expõe a porta 3000
