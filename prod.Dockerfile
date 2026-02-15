@@ -1,25 +1,39 @@
-FROM node:20
+# Stage 1: Build
+FROM node:20-slim AS builder
 
-# Define o diretório de trabalho
 WORKDIR /app
 
 # Instala dependências de compilação para o SQLite3
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# Copia os arquivos do projeto
+# Copia package.json e instala TODAS as dependências
+COPY package.json ./
+RUN npm install
+
+# Copia o resto dos arquivos
 COPY . .
 
-# Inicializa o projeto, define como módulo e instala as dependências
-RUN if [ ! -f package.json ]; then \
-      npm init -y && \
-      sed -i 's/"main": "index.js"/"type": "module"/g' package.json; \
-    fi && \
-    npm install express sqlite3 sqlite
+# Faz o build do Vite (gera pasta dist/)
+RUN npm run build
 
-# Garante permissões de escrita para o banco de dados
+# Stage 2: Production
+FROM node:20-slim
+
+WORKDIR /app
+
+# Instala dependências de compilação para o SQLite3
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+# Copia arquivos do build
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/server.js ./
+
+# Garante permissão de escrita
 RUN chmod -R 777 /app
 
-# Expõe a porta 3000
+# Expõe a porta
 EXPOSE 3000
 
 # Inicia o servidor

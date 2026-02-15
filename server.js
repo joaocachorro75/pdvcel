@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
@@ -12,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'database.sqlite');
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(__dirname));
 
 // Inicialização do Banco de Dados SQL
 async function setupDatabase() {
@@ -129,19 +129,36 @@ app.post('/api/db', async (req, res) => {
   }
 });
 
-// Fallback para SPA (Express 5 compatível)
-app.get(/^(?!\/api).+/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Servir arquivos estáticos da pasta dist (build do Vite)
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  console.log('Servindo arquivos de:', distPath);
+} else {
+  app.use(express.static(__dirname));
+  console.log('Servindo arquivos de:', __dirname);
+}
 
-app.use((req, res) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// SPA fallback - usar middleware ao invés de rota com wildcard (Express 5)
+app.use((req, res, next) => {
+  // Ignora rotas de API
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  
+  const indexPath = fs.existsSync(distPath) 
+    ? path.join(distPath, 'index.html')
+    : path.join(__dirname, 'index.html');
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
   } else {
-    res.status(404).json({ error: 'Not Found' });
+    res.status(404).send('Arquivo não encontrado');
   }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor SQL rodando na porta ${PORT}`);
+  console.log('Dist path:', distPath);
+  console.log('Dist exists:', fs.existsSync(distPath));
 });
