@@ -24,9 +24,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initApp = async () => {
-      // Pequeno delay para garantir que o DOM esteja pronto
-      await new Promise(r => setTimeout(r, 500));
-      
+      // Failsafe: Se em 3 segundos não carregar, libera a tela
+      const timeout = setTimeout(() => {
+        if (isLoading) {
+          console.warn("Tempo limite de carregamento atingido. Forçando inicialização.");
+          setIsLoading(false);
+        }
+      }, 3000);
+
       try {
         const response = await fetch('/api/db');
         if (response.ok) {
@@ -34,21 +39,16 @@ const App: React.FC = () => {
           if (data.settings) setSettings(data.settings);
           if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
           if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
-          console.log("Sincronizado com servidor.");
-        } else {
-          loadFromLocal();
+          console.log("Dados sincronizados.");
         }
       } catch (error) {
-        console.warn("Servidor offline, carregando localmente.");
-        loadFromLocal();
+        console.warn("Servidor inacessível, usando dados locais.");
+        const savedSettings = localStorage.getItem('pdv_settings');
+        if (savedSettings) setSettings(JSON.parse(savedSettings));
       } finally {
+        clearTimeout(timeout);
         setIsLoading(false);
       }
-    };
-
-    const loadFromLocal = () => {
-      const savedSettings = localStorage.getItem('pdv_settings');
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
     };
 
     initApp();
@@ -58,21 +58,16 @@ const App: React.FC = () => {
     const currentSettings = updatedSettings || settings;
     const products = JSON.parse(localStorage.getItem('pdv_products') || '[]');
     const sales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
-    
     localStorage.setItem('pdv_settings', JSON.stringify(currentSettings));
 
     try {
       await fetch('/api/db', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          settings: currentSettings,
-          products,
-          sales
-        })
+        body: JSON.stringify({ settings: currentSettings, products, sales })
       });
     } catch (error) {
-      console.warn("Erro ao salvar no servidor.");
+      console.warn("Erro ao sincronizar com servidor.");
     }
   };
 
@@ -82,15 +77,6 @@ const App: React.FC = () => {
       return true;
     }
     return false;
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-  };
-
-  const updateSettings = (newSettings: Settings) => {
-    setSettings(newSettings);
-    syncWithServer(newSettings);
   };
 
   if (isLoading) return null;
@@ -107,12 +93,12 @@ const App: React.FC = () => {
           } 
         />
         
-        <Route element={isAuthenticated ? <Layout settings={settings} onLogout={handleLogout} /> : <Navigate to="/login" replace />}>
+        <Route element={isAuthenticated ? <Layout settings={settings} onLogout={() => setIsAuthenticated(false)} /> : <Navigate to="/login" replace />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/vender" element={<POS settings={settings} onSaleComplete={() => syncWithServer()} />} />
           <Route path="/estoque" element={<Inventory onUpdate={() => syncWithServer()} />} />
           <Route path="/vendas" element={<SalesHistory settings={settings} />} />
-          <Route path="/configuracoes" element={<SettingsPage settings={settings} setSettings={updateSettings as any} />} />
+          <Route path="/configuracoes" element={<SettingsPage settings={settings} setSettings={setSettings as any} />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
