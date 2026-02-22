@@ -24,7 +24,6 @@
         margin: 0;
         padding: 0;
         height: 100%;
-        overflow: hidden;
       }
       
       body {
@@ -34,6 +33,17 @@
       }
       
       #root {
+        height: 100%;
+      }
+      
+      /* Scroll apenas para Landing Page */
+      .landing-scroll {
+        height: 100%;
+        overflow-y: auto;
+      }
+      
+      /* App interno sem scroll */
+      .app-no-scroll {
         height: 100%;
         overflow: hidden;
       }

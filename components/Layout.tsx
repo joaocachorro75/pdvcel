@@ -28,7 +28,7 @@ const Layout: React.FC<LayoutProps> = ({ settings, onLogout }) => {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 pb-20">
+    <div className="app-no-scroll flex flex-col bg-slate-50 pb-20">
       {/* Header Fixo */}
       <header className="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-2">
