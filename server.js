@@ -144,7 +144,7 @@ app.post('/api/db', async (req, res) => {
   }
 });
 
-// Image Search API - busca imagens do produto pelo nome (Unsplash gratuito)
+// Image Search API - busca imagens do produto pelo nome (SerpApi)
 app.get('/api/search-image', async (req, res) => {
   const { q } = req.query;
   
@@ -152,31 +152,32 @@ app.get('/api/search-image', async (req, res) => {
     return res.status(400).json({ error: 'Parâmetro q (query) é obrigatório' });
   }
 
+  const SERPAPI_KEY = 'bdd1941fc76b3f2c424f3ca5d4076bf994e56d2397f37ab0b9b65d1f62449dc3';
+  
   try {
-    // Unsplash API gratuita - sem necessidade de chave para busca básica
-    const response = await axios.get('https://api.unsplash.com/search/photos', {
+    // SerpApi - Google Images (temos chave disponível)
+    const response = await axios.get('https://serpapi.com/search', {
       params: {
-        query: `${q} product`,
-        per_page: 12,
-        orientation: 'squarish'
+        engine: 'google_images',
+        q: `${q} produto`,
+        api_key: SERPAPI_KEY,
+        ijn: 0,
+        num: 8
       },
-      headers: {
-        'Accept-Version': 'v1'
-      },
-      timeout: 8000
+      timeout: 10000
     });
 
-    const images = response.data.results?.map(img => ({
-      thumbnail: img.urls?.thumb || img.urls?.small,
-      original: img.urls?.regular || img.urls?.full,
-      title: img.alt_description || img.description || q
+    const images = response.data.images_results?.slice(0, 8).map(img => ({
+      thumbnail: img.thumbnail || img.original_thumbnail,
+      original: img.original || img.link,
+      title: img.title || q
     })) || [];
 
     res.json({ images });
   } catch (error) {
     console.error('Erro ao buscar imagens:', error.message);
     
-    // Fallback: usar picsum com seed (sempre funciona)
+    // Fallback: picsum com seed
     const images = Array.from({ length: 6 }, (_, i) => ({
       thumbnail: `https://picsum.photos/seed/${encodeURIComponent(q)}${i}/200/200`,
       original: `https://picsum.photos/seed/${encodeURIComponent(q)}${i}/400/400`,
