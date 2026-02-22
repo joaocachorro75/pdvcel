@@ -117,20 +117,43 @@ async function setupDatabase() {
     console.log('✅ SuperAdmin criado: senha = toligado123');
   }
 
-  // Migrar dados antigos se existirem
-  const oldSettings = await db.get("SELECT * FROM settings WHERE id = 1");
-  if (oldSettings && !oldSettings.migrated) {
-    const tenantId = 'tenant_' + Date.now();
-    await db.run(
-      `INSERT OR IGNORE INTO tenants (id, whatsapp, shop_name, shop_logo, password, pix_key, plan, status, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, '99999999999', oldSettings.shopName || 'Minha Loja', oldSettings.shopLogo, oldSettings.adminPassword || 'admin', oldSettings.pixKey, 'iniciante', 'active', Date.now()]
-    );
-    // Migrar produtos e vendas
-    await db.run(`UPDATE products SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
-    await db.run(`UPDATE sales SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
-    await db.run(`UPDATE settings SET migrated = 1 WHERE id = 1`);
-    console.log('✅ Dados antigos migrados para tenant:', tenantId);
+  // Migrar dados antigos se existirem (verificando se já foi migrado)
+  try {
+    const oldSettings = await db.get("SELECT * FROM settings WHERE id = 1");
+    
+    // Verificar se a coluna migrated existe
+    const settingsInfo = await db.all("PRAGMA table_info(settings)");
+    const hasMigratedColumn = settingsInfo.some(col => col.name === 'migrated');
+    
+    if (oldSettings) {
+      // Se não tem coluna migrated, assumimos que não foi migrado ainda
+      const alreadyMigrated = hasMigratedColumn && oldSettings.migrated === 1;
+      
+      if (!alreadyMigrated) {
+        // Verificar se já existe tenant para esses dados
+        const existingTenant = await db.get("SELECT * FROM tenants WHERE shop_name = ?", [oldSettings.shopName]);
+        
+        if (!existingTenant) {
+          const tenantId = 'tenant_' + Date.now();
+          await db.run(
+            `INSERT INTO tenants (id, whatsapp, shop_name, shop_logo, password, pix_key, plan, status, created_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [tenantId, '99999999999', oldSettings.shopName || 'Minha Loja', oldSettings.shopLogo, oldSettings.adminPassword || 'admin', oldSettings.pixKey || '', 'iniciante', 'active', Date.now()]
+          );
+          // Migrar produtos e vendas
+          await db.run(`UPDATE products SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
+          await db.run(`UPDATE sales SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
+          console.log('✅ Dados antigos migrados para tenant:', tenantId);
+        }
+        
+        // Marcar como migrado se a coluna existir
+        if (hasMigratedColumn) {
+          await db.run(`UPDATE settings SET migrated = 1 WHERE id = 1`);
+        }
+      }
+    }
+  } catch (err) {
+    console.log('Aviso: migração de dados antigos:', err.message);
   }
 
   console.log('Banco de dados inicializado com sucesso!');
