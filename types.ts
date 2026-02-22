@@ -1,4 +1,3 @@
-
 export interface Product {
   id: string;
   name: string;
@@ -18,6 +17,8 @@ export interface Sale {
   total: number;
   paymentMethod: 'money' | 'pix' | 'card';
   timestamp: number;
+  buyerName?: string;
+  buyerPhone?: string;
 }
 
 export interface Settings {

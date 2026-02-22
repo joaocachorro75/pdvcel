@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,9 @@ const PORT = process.env.PORT || 3000;
 // Use persistent data directory if available
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
+
+// SerpApi key for image search
+const SERPAPI_KEY = 'bdd1941fc76b3f2c424f3ca5d4076bf994e56d2397f37ab0b9b65d1f62449dc3';
 
 console.log('Data directory:', DATA_DIR);
 console.log('Database path:', DB_PATH);
@@ -138,6 +142,49 @@ app.post('/api/db', async (req, res) => {
     await db.run('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Erro ao salvar no banco SQL' });
+  }
+});
+
+// Image Search API - busca imagens do produto pelo nome (Unsplash gratuito)
+app.get('/api/search-image', async (req, res) => {
+  const { q } = req.query;
+  
+  if (!q) {
+    return res.status(400).json({ error: 'Parâmetro q (query) é obrigatório' });
+  }
+
+  try {
+    // Unsplash API gratuita - sem necessidade de chave para busca básica
+    const response = await axios.get('https://api.unsplash.com/search/photos', {
+      params: {
+        query: `${q} product`,
+        per_page: 12,
+        orientation: 'squarish'
+      },
+      headers: {
+        'Accept-Version': 'v1'
+      },
+      timeout: 8000
+    });
+
+    const images = response.data.results?.map((img: any) => ({
+      thumbnail: img.urls?.thumb || img.urls?.small,
+      original: img.urls?.regular || img.urls?.full,
+      title: img.alt_description || img.description || q
+    })) || [];
+
+    res.json({ images });
+  } catch (error: any) {
+    console.error('Erro ao buscar imagens:', error.message);
+    
+    // Fallback: usar picsum com seed (sempre funciona)
+    const images = Array.from({ length: 6 }, (_, i) => ({
+      thumbnail: `https://picsum.photos/seed/${encodeURIComponent(q)}${i}/200/200`,
+      original: `https://picsum.photos/seed/${encodeURIComponent(q)}${i}/400/400`,
+      title: `${q} - opção ${i + 1}`
+    }));
+    
+    res.json({ images });
   }
 });
 
