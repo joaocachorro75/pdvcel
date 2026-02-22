@@ -23,7 +23,7 @@ interface ImageResult {
   title: string;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
+const Inventory: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,9 +45,24 @@ const Inventory: React.FC<InventoryProps> = ({ onUpdate }) => {
     image: ''
   });
 
+  // Carregar produtos do tenant
   useEffect(() => {
-    const saved = localStorage.getItem('pdv_products');
-    if (saved) setProducts(JSON.parse(saved));
+    const loadProducts = async () => {
+      try {
+        const tenantData = localStorage.getItem('pdv_tenant');
+        if (tenantData) {
+          const tenant = JSON.parse(tenantData);
+          const res = await fetch(`/api/tenant/${tenant.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setProducts(data.products || []);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar produtos:', err);
+      }
+    };
+    loadProducts();
     return () => stopCamera();
   }, []);
 

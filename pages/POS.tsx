@@ -21,13 +21,9 @@ import {
 } from 'lucide-react';
 import { Product, CartItem, Sale, Settings } from '../types';
 
-interface POSProps {
-  settings: Settings;
-  onSaleComplete?: () => void;
-}
-
-const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
+const POS: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -41,9 +37,27 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
   const [buyerName, setBuyerName] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
 
+  // Carregar dados do tenant
   useEffect(() => {
-    const saved = localStorage.getItem('pdv_products');
-    if (saved) setProducts(JSON.parse(saved));
+    const loadTenantData = async () => {
+      try {
+        const tenantData = localStorage.getItem('pdv_tenant');
+        if (tenantData) {
+          const tenant = JSON.parse(tenantData);
+          const res = await fetch(`/api/tenant/${tenant.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setSettings(data.settings);
+            setProducts(data.products || []);
+            localStorage.setItem('pdv_products', JSON.stringify(data.products || []));
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      }
+    };
+    
+    loadTenantData();
   }, []);
 
   const filteredProducts = useMemo(() => {

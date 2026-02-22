@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   Image as ImageIcon, 
@@ -7,69 +7,100 @@ import {
   Lock, 
   Save, 
   RefreshCcw,
-  QrCode
+  QrCode,
+  Check
 } from 'lucide-react';
 import { Settings } from '../types';
 
-interface SettingsPageProps {
-  settings: Settings;
-  setSettings: React.Dispatch<React.SetStateAction<Settings>>;
-}
-
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, setSettings }) => {
-  const [formData, setFormData] = useState<Settings>(settings);
+const SettingsPage: React.FC = () => {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [formData, setFormData] = useState<Settings | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+  const [loading, setLoading] = useState(true);
+
+  // Carregar dados do tenant
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const tenantData = localStorage.getItem('pdv_tenant');
+        if (tenantData) {
+          const tenant = JSON.parse(tenantData);
+          const res = await fetch(`/api/tenant/${tenant.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setSettings(data.settings);
+            setFormData(data.settings);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, shopLogo: reader.result as string }));
+        setFormData(prev => prev ? { ...prev, shop_logo: reader.result as string } : prev);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSaveGeneral = (e: React.FormEvent) => {
+  const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData) return;
+    
     setSaveStatus('saving');
-    setTimeout(() => {
-      setSettings(prev => ({
-        ...prev,
-        shopName: formData.shopName,
-        shopLogo: formData.shopLogo,
-        pixKey: formData.pixKey
-      }));
+    
+    try {
+      const tenantData = localStorage.getItem('pdv_tenant');
+      if (tenantData) {
+        const tenant = JSON.parse(tenantData);
+        await fetch(`/api/tenant/${tenant.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: formData })
+        });
+      }
+      setSettings(formData);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
-    }, 800);
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+      alert('Erro ao salvar configurações');
+      setSaveStatus('idle');
+    }
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentPassword !== settings.adminPassword) {
-      alert('Senha atual incorreta!');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      alert('As senhas não coincidem!');
-      return;
-    }
     if (newPassword.length < 4) {
       alert('A nova senha deve ter pelo menos 4 caracteres!');
       return;
     }
 
-    setSettings(prev => ({ ...prev, adminPassword: newPassword }));
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    alert('Senha alterada com sucesso!');
+    alert('Funcionalidade disponível em breve!');
   };
+
+  if (loading || !settings || !formData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -92,7 +123,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, setSettings }) =>
               <div className="flex items-center gap-6">
                 <div className="relative group">
                   <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
-                    <img src={formData.shopLogo} alt="Logo" className="w-full h-full object-cover" />
+                    <img src={formData.shop_logo} alt="Logo" className="w-full h-full object-cover" />
                   </div>
                   <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity rounded-2xl">
                     <span className="text-white text-[10px] font-bold uppercase tracking-wider">Trocar</span>
@@ -112,8 +143,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, setSettings }) =>
                     <Store className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                       type="text" 
-                      value={formData.shopName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, shopName: e.target.value }))}
+                      value={formData.shop_name}
+                      onChange={(e) => setFormData(prev => prev ? { ...prev, shop_name: e.target.value } : prev)}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                       placeholder="Nome do seu negócio"
                     />
@@ -125,8 +156,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, setSettings }) =>
                     <QrCode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                       type="text" 
-                      value={formData.pixKey}
-                      onChange={(e) => setFormData(prev => ({ ...prev, pixKey: e.target.value }))}
+                      value={formData.pix_key || ''}
+                      onChange={(e) => setFormData(prev => prev ? { ...prev, pix_key: e.target.value } : prev)}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                       placeholder="Chave PIX (CPF, E-mail, Celular...)"
                     />

@@ -25,15 +25,32 @@ interface SalesHistoryProps {
 
 type FilterPeriod = 'all' | 'today' | 'week' | 'month';
 
-const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
+const SalesHistory: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('all');
 
+  // Carregar dados do tenant
   useEffect(() => {
-    const saved = localStorage.getItem('pdv_sales');
-    if (saved) setSales(JSON.parse(saved).reverse());
+    const loadData = async () => {
+      try {
+        const tenantData = localStorage.getItem('pdv_tenant');
+        if (tenantData) {
+          const tenant = JSON.parse(tenantData);
+          const res = await fetch(`/api/tenant/${tenant.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setSettings(data.settings);
+            setSales((data.sales || []).reverse());
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      }
+    };
+    loadData();
   }, []);
 
   // Filter sales by period
