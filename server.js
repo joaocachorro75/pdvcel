@@ -85,6 +85,27 @@ async function setupDatabase() {
     )
   `);
 
+  // Migração: adicionar coluna tenant_id se não existir
+  try {
+    const productsInfo = await db.all("PRAGMA table_info(products)");
+    const hasTenantId = productsInfo.some((col: any) => col.name === 'tenant_id');
+    
+    if (!hasTenantId) {
+      console.log('🔄 Migrando tabela products para multi-tenant...');
+      await db.exec(`ALTER TABLE products ADD COLUMN tenant_id TEXT`);
+    }
+
+    const salesInfo = await db.all("PRAGMA table_info(sales)");
+    const salesHasTenantId = salesInfo.some((col: any) => col.name === 'tenant_id');
+    
+    if (!salesHasTenantId) {
+      console.log('🔄 Migrando tabela sales para multi-tenant...');
+      await db.exec(`ALTER TABLE sales ADD COLUMN tenant_id TEXT`);
+    }
+  } catch (err) {
+    console.log('Aviso: migração de colunas:', err.message);
+  }
+
   // Criar SuperAdmin padrão se não existir
   const superAdmin = await db.get("SELECT * FROM tenants WHERE id = 'superadmin'");
   if (!superAdmin) {
