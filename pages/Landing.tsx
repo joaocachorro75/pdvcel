@@ -93,6 +93,8 @@ const Landing: React.FC = () => {
       ],
       highlight: false
     }
+    // NOTA: Plano "parceiro" existe mas NÃO aparece no site
+    // É gratuito, só o SuperAdmin pode cadastrar
   ];
 
   const testimonials = [

@@ -13,7 +13,8 @@ import {
   Clock,
   Ban,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Star
 } from 'lucide-react';
 
 interface Tenant {
@@ -45,7 +46,8 @@ const SuperAdmin: React.FC = () => {
   const plans = [
     { id: 'iniciante', name: 'Iniciante', price: 29 },
     { id: 'profissional', name: 'Profissional', price: 59 },
-    { id: 'empresarial', name: 'Empresarial', price: 99 }
+    { id: 'empresarial', name: 'Empresarial', price: 99 },
+    { id: 'parceiro', name: '⭐ Parceiro (Gratuito)', price: 0, hidden: true }
   ];
 
   useEffect(() => {
@@ -127,11 +129,12 @@ const SuperAdmin: React.FC = () => {
     const colors: Record<string, string> = {
       iniciante: 'bg-slate-100 text-slate-700',
       profissional: 'bg-indigo-100 text-indigo-700',
-      empresarial: 'bg-amber-100 text-amber-700'
+      empresarial: 'bg-amber-100 text-amber-700',
+      parceiro: 'bg-emerald-100 text-emerald-700'
     };
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-bold ${colors[plan] || 'bg-slate-100'}`}>
-        {planData?.name || plan}
+        {plan === 'parceiro' ? '⭐ Parceiro' : (planData?.name || plan)}
       </span>
     );
   };
@@ -203,11 +206,38 @@ const SuperAdmin: React.FC = () => {
               <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-green-400" />
               </div>
-              <span className="text-slate-400 text-sm">Faturamento</span>
+              <span className="text-slate-400 text-sm">MRR Previsto</span>
             </div>
             <p className="text-3xl font-black text-white">
-              R$ {stats?.totalRevenue?.toFixed(2) || '0,00'}
+              R$ {stats?.mrr || 0}
             </p>
+          </div>
+        </div>
+
+        {/* Segunda linha de stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-emerald-400" />
+              <span className="text-slate-400 text-sm">Parceiros</span>
+            </div>
+            <p className="text-xl font-bold text-white mt-1">{stats?.parceiroTenants || 0}</p>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-indigo-400" />
+              <span className="text-slate-400 text-sm">Vendas Totais</span>
+            </div>
+            <p className="text-xl font-bold text-white mt-1">{stats?.totalSales || 0}</p>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-green-400" />
+              <span className="text-slate-400 text-sm">Faturamento Lojas</span>
+            </div>
+            <p className="text-xl font-bold text-white mt-1">R$ {stats?.totalRevenue?.toFixed(2) || '0,00'}</p>
           </div>
         </div>
 

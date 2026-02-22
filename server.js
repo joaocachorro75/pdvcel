@@ -379,15 +379,27 @@ app.get('/api/admin/stats', async (req, res) => {
     const totalTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE id != 'superadmin'");
     const activeTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE status = 'active' AND id != 'superadmin'");
     const trialTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE status = 'trial' AND id != 'superadmin'");
-    const totalSales = await db.get("SELECT COUNT(*) as count, SUM(total) as revenue FROM sales WHERE tenant_id NOT LIKE 'tenant_%' OR 1=1");
+    const parceiroTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE plan = 'parceiro' AND id != 'superadmin'");
+    const totalSales = await db.get("SELECT COUNT(*) as count, SUM(total) as revenue FROM sales");
     const planCounts = await db.all("SELECT plan, COUNT(*) as count FROM tenants WHERE id != 'superadmin' GROUP BY plan");
+
+    // Calcular MRR previsto (faturamento mensal recorrente)
+    const planPrices = { iniciante: 29, profissional: 59, empresarial: 99, parceiro: 0 };
+    let mrr = 0;
+    planCounts.forEach((p: any) => {
+      if (planPrices[p.plan] !== undefined) {
+        mrr += planPrices[p.plan] * p.count;
+      }
+    });
 
     res.json({
       totalTenants: totalTenants.count,
       activeTenants: activeTenants.count,
       trialTenants: trialTenants.count,
+      parceiroTenants: parceiroTenants.count,
       totalSales: totalSales.count || 0,
       totalRevenue: totalSales.revenue || 0,
+      mrr,
       planCounts
     });
   } catch (err) {
