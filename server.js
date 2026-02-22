@@ -88,7 +88,7 @@ async function setupDatabase() {
   // Migração: adicionar coluna tenant_id se não existir
   try {
     const productsInfo = await db.all("PRAGMA table_info(products)");
-    const hasTenantId = productsInfo.some((col: any) => col.name === 'tenant_id');
+    const hasTenantId = productsInfo.some(col => col.name === 'tenant_id');
     
     if (!hasTenantId) {
       console.log('🔄 Migrando tabela products para multi-tenant...');
@@ -96,7 +96,7 @@ async function setupDatabase() {
     }
 
     const salesInfo = await db.all("PRAGMA table_info(sales)");
-    const salesHasTenantId = salesInfo.some((col: any) => col.name === 'tenant_id');
+    const salesHasTenantId = salesInfo.some(col => col.name === 'tenant_id');
     
     if (!salesHasTenantId) {
       console.log('🔄 Migrando tabela sales para multi-tenant...');
