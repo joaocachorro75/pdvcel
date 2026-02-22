@@ -85,6 +85,58 @@ async function setupDatabase() {
     )
   `);
 
+  // Tabela de configurações do sistema (SuperAdmin)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS system_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      payment_pix_key TEXT,
+      payment_pix_name TEXT,
+      payment_due_day INTEGER DEFAULT 5,
+      trial_days INTEGER DEFAULT 7,
+      reminder_days INTEGER DEFAULT 3,
+      reminder_enabled INTEGER DEFAULT 1,
+      created_at INTEGER
+    )
+  `);
+
+  // Inserir config padrão se não existir
+  const config = await db.get('SELECT * FROM system_config WHERE id = 1');
+  if (!config) {
+    await db.run(
+      'INSERT INTO system_config (id, payment_pix_key, payment_pix_name, created_at) VALUES (?, ?, ?, ?)',
+      [1, 'suporte@to-ligado.com', 'To-Ligado.com', Date.now()]
+    );
+  }
+
+  // Tabela de pagamentos/assinaturas
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      plan TEXT,
+      price REAL,
+      status TEXT DEFAULT 'pending',
+      due_date INTEGER,
+      paid_at INTEGER,
+      payment_method TEXT,
+      payment_proof TEXT,
+      created_at INTEGER,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
+  // Tabela de lembretes enviados
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS reminders (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      subscription_id TEXT,
+      type TEXT,
+      sent_at INTEGER,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
   // Migração: adicionar coluna tenant_id se não existir
   try {
     const productsInfo = await db.all("PRAGMA table_info(products)");
@@ -330,6 +382,164 @@ app.post('/api/tenant/:tenantId', async (req, res) => {
     await db.run('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Erro ao salvar' });
+  }
+});
+
+// ==================== SISTEMA FINANCEIRO ====================
+
+// Buscar configurações do sistema
+app.get('/api/admin/config', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    const config = await db.get('SELECT * FROM system_config WHERE id = 1');
+    res.json({ config });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar configurações' });
+  }
+});
+
+// Salvar configurações do sistema
+app.post('/api/admin/config', async (req, res) => {
+  const db = await dbPromise;
+  const { payment_pix_key, payment_pix_name, payment_due_day, trial_days, reminder_days, reminder_enabled } = req.body;
+  
+  try {
+    await db.run(
+      `INSERT OR REPLACE INTO system_config 
+       (id, payment_pix_key, payment_pix_name, payment_due_day, trial_days, reminder_days, reminder_enabled, created_at) 
+       VALUES (1, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM system_config WHERE id = 1), ?))`,
+      [payment_pix_key, payment_pix_name, payment_due_day || 5, trial_days || 7, reminder_days || 3, reminder_enabled ? 1 : 0, Date.now()]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar configurações' });
+  }
+});
+
+// Listar assinaturas/pagamentos
+app.get('/api/admin/subscriptions', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    const subscriptions = await db.all(`
+      SELECT s.*, t.shop_name, t.whatsapp 
+      FROM subscriptions s 
+      JOIN tenants t ON s.tenant_id = t.id 
+      ORDER BY s.due_date DESC
+    `);
+    res.json({ subscriptions });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar assinaturas' });
+  }
+});
+
+// Criar cobrança para cliente
+app.post('/api/admin/subscription', async (req, res) => {
+  const db = await dbPromise;
+  const { tenant_id, plan, price, due_date } = req.body;
+  
+  try {
+    const id = 'sub_' + Date.now();
+    await db.run(
+      `INSERT INTO subscriptions (id, tenant_id, plan, price, due_date, status, created_at) 
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+      [id, tenant_id, plan, price, due_date, Date.now()]
+    );
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao criar cobrança' });
+  }
+});
+
+// Marcar como pago
+app.put('/api/admin/subscription/:id', async (req, res) => {
+  const db = await dbPromise;
+  const { id } = req.params;
+  const { status, payment_method, payment_proof } = req.body;
+  
+  try {
+    const updates = ['status = ?'];
+    const values = [status];
+    
+    if (status === 'paid') {
+      updates.push('paid_at = ?');
+      values.push(Date.now());
+    }
+    if (payment_method) {
+      updates.push('payment_method = ?');
+      values.push(payment_method);
+    }
+    if (payment_proof) {
+      updates.push('payment_proof = ?');
+      values.push(payment_proof);
+    }
+    
+    values.push(id);
+    await db.run(`UPDATE subscriptions SET ${updates.join(', ')} WHERE id = ?`, values);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar assinatura' });
+  }
+});
+
+// Dashboard financeiro
+app.get('/api/admin/finance', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    const now = Date.now();
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    
+    const pending = await db.get("SELECT COUNT(*) as count, SUM(price) as total FROM subscriptions WHERE status = 'pending'");
+    const paid = await db.get("SELECT COUNT(*) as count, SUM(price) as total FROM subscriptions WHERE status = 'paid'");
+    const overdue = await db.get("SELECT COUNT(*) as count, SUM(price) as total FROM subscriptions WHERE status = 'pending' AND due_date < ?", [now]);
+    const thisMonth = await db.get("SELECT COUNT(*) as count, SUM(price) as total FROM subscriptions WHERE status = 'paid' AND paid_at >= ?", [monthStart.getTime()]);
+    
+    const byPlan = await db.all(`
+      SELECT plan, COUNT(*) as count, SUM(price) as total 
+      FROM subscriptions 
+      WHERE status = 'paid' 
+      GROUP BY plan
+    `);
+    
+    res.json({
+      pending: { count: pending.count || 0, total: pending.total || 0 },
+      paid: { count: paid.count || 0, total: paid.total || 0 },
+      overdue: { count: overdue.count || 0, total: overdue.total || 0 },
+      thisMonth: { count: thisMonth.count || 0, total: thisMonth.total || 0 },
+      byPlan
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar dados financeiros' });
+  }
+});
+
+// Listar tenants com assinatura vencida ou prestes a vencer
+app.get('/api/admin/due-tenants', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    const now = Date.now();
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    
+    const overdue = await db.all(`
+      SELECT t.id, t.shop_name, t.whatsapp, t.plan, t.status, s.due_date, s.price
+      FROM tenants t
+      LEFT JOIN subscriptions s ON t.id = s.tenant_id AND s.status = 'pending'
+      WHERE t.id != 'superadmin' AND s.due_date < ?
+      ORDER BY s.due_date ASC
+    `, [now]);
+    
+    const upcoming = await db.all(`
+      SELECT t.id, t.shop_name, t.whatsapp, t.plan, t.status, s.due_date, s.price
+      FROM tenants t
+      LEFT JOIN subscriptions s ON t.id = s.tenant_id AND s.status = 'pending'
+      WHERE t.id != 'superadmin' AND s.due_date >= ? AND s.due_date <= ?
+      ORDER BY s.due_date ASC
+    `, [now, now + threeDays]);
+    
+    res.json({ overdue, upcoming });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar vencimentos' });
   }
 });
 
