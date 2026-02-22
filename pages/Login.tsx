@@ -1,113 +1,133 @@
-
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle } from 'lucide-react';
+import { 
+  Smartphone, 
+  Mail, 
+  Lock, 
+  Eye,
+  EyeOff
+} from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (password: string) => boolean;
-  shopName: string;
-  shopLogo: string;
+  onLogin?: (email: string, password: string) => boolean;
+  shopName?: string;
+  shopLogo?: string;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, shopName, shopLogo }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (onLogin(password)) {
-      setError('');
-    } else {
-      setError('Senha incorreta. Tente novamente.');
-    }
-  };
+    setError('');
+    setLoading(true);
 
-  const handleResetData = () => {
-    if (confirm('Deseja resetar o sistema para as configurações de fábrica? Isso limpará a senha customizada e voltará para "admin". Seus produtos e vendas NÃO serão apagados.')) {
-      const savedSettings = localStorage.getItem('pdv_settings');
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        settings.adminPassword = 'admin';
-        localStorage.setItem('pdv_settings', JSON.stringify(settings));
-        alert('Senha resetada para "admin".');
-        window.location.reload();
+    // Simular login
+    setTimeout(() => {
+      if (onLogin) {
+        const success = onLogin(password);
+        if (!success) {
+          setError('E-mail ou senha incorretos');
+        }
+      } else {
+        // Login demo - qualquer senha funciona
+        localStorage.setItem('pdv_auth', 'true');
+        window.location.href = '/';
       }
-    }
+      setLoading(false);
+    }, 1000);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
+        <div className="bg-white rounded-3xl p-8 shadow-2xl">
+          {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center p-4 bg-indigo-50 rounded-2xl mb-4">
-              <img src={shopLogo} alt="Logo" className="w-16 h-16 rounded-xl object-cover" />
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-indigo-600 rounded-2xl mb-4 shadow-lg shadow-indigo-200">
+              {shopLogo ? (
+                <img src={shopLogo} alt={shopName} className="w-12 h-12 object-contain" />
+              ) : (
+                <Smartphone className="w-10 h-10 text-white" />
+              )}
             </div>
-            <h1 className="text-2xl font-bold text-slate-800">{shopName}</h1>
-            <p className="text-slate-500 text-sm mt-1">Acesso Administrativo</p>
+            <h1 className="text-2xl font-black text-slate-900">{shopName || 'PdvCel'}</h1>
+            <p className="text-slate-500 mt-1">Sistema de Vendas Mobile</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl mb-4 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Usuário</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <User size={18} />
-                </div>
-                <input
-                  type="text"
-                  readOnly
-                  value="admin"
-                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 bg-slate-50 rounded-lg text-slate-600 focus:outline-none"
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="email"
+                  required
+                  placeholder="seu@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:bg-white text-base"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Senha</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock size={18} />
-                </div>
-                <input
-                  type="password"
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Sua senha"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                  autoFocus
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:bg-white text-base"
                 />
-              </div>
-              <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-                <AlertCircle size={12} />
-                Dica: A senha padrão é <span className="font-bold">admin</span>
-              </p>
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 rounded-lg">
-                <p className="text-red-500 text-sm font-medium text-center">{error}</p>
                 <button 
                   type="button"
-                  onClick={handleResetData}
-                  className="w-full text-[10px] text-red-400 hover:text-red-600 underline mt-1"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
                 >
-                  Esqueceu a senha? Resetar para padrão.
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-            )}
+            </div>
 
-            <button
+            <button 
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-lg shadow-indigo-200 transition-all flex items-center justify-center"
+              disabled={loading}
+              className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 mt-6"
             >
-              Entrar no Sistema
+              {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
 
-          <p className="text-center text-slate-400 text-xs mt-8">
-            SmartPDV v1.0.0
-          </p>
+          {/* Links */}
+          <div className="mt-6 text-center space-y-2">
+            <a href="#" className="text-sm text-indigo-600 font-medium hover:underline">
+              Esqueci minha senha
+            </a>
+            <p className="text-sm text-slate-500">
+              Não tem conta? <a href="/cadastro" className="text-indigo-600 font-medium hover:underline">Criar conta grátis</a>
+            </p>
+          </div>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-white/60 text-sm mt-6">
+          © 2026 PdvCel - Um produto <a href="https://to-ligado.com" target="_blank" className="underline hover:text-white">To-Ligado.com</a>
+        </p>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Landing from './pages/Landing';
+import SignUp from './pages/SignUp';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POS';
@@ -24,7 +26,7 @@ const LoadingScreen: React.FC = () => (
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
     color: 'white',
     fontFamily: 'system-ui, -apple-system, sans-serif'
   }}>
@@ -32,12 +34,12 @@ const LoadingScreen: React.FC = () => (
       width: 60,
       height: 60,
       border: '4px solid rgba(255,255,255,0.1)',
-      borderTopColor: '#4f46e5',
+      borderTopColor: 'white',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     }} />
     <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    <p style={{ marginTop: 20, opacity: 0.7, fontSize: 14 }}>Carregando PDV...</p>
+    <p style={{ marginTop: 20, opacity: 0.7, fontSize: 14 }}>Carregando PdvCel...</p>
   </div>
 );
 
@@ -45,27 +47,29 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const initApp = async () => {
       // Failsafe: Se em 5 segundos não carregar, libera a tela
       const timeout = setTimeout(() => {
         if (isLoading) {
-          console.warn("Tempo limite de carregamento atingido. Usando dados locais.");
+          console.warn("Tempo limite de carregamento atingido.");
           loadFromLocalStorage();
           setIsLoading(false);
         }
       }, 5000);
 
       try {
+        // Verificar autenticação
+        const auth = localStorage.getItem('pdv_auth');
+        if (auth) setIsAuthenticated(true);
+
         const response = await fetch('/api/db');
         if (response.ok) {
           const data = await response.json();
           if (data.settings) setSettings(data.settings);
           if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
           if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
-          console.log("Dados sincronizados com servidor.");
         } else {
           loadFromLocalStorage();
         }
@@ -84,7 +88,7 @@ const App: React.FC = () => {
         try {
           setSettings(JSON.parse(savedSettings));
         } catch (e) {
-          console.error("Erro ao carregar configurações locais.");
+          console.error("Erro ao carregar configurações.");
         }
       }
     };
@@ -112,36 +116,54 @@ const App: React.FC = () => {
   const handleLogin = (password: string) => {
     if (password === settings.adminPassword) {
       setIsAuthenticated(true);
+      localStorage.setItem('pdv_auth', 'true');
       return true;
     }
     return false;
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('pdv_auth');
+  };
+
   if (isLoading) return <LoadingScreen />;
 
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Routes>
+        {/* Marketing Pages */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/cadastro" element={<SignUp />} />
         <Route 
           path="/login" 
           element={
             isAuthenticated ? 
-            <Navigate to="/" replace /> : 
+            <Navigate to="/app" replace /> : 
             <Login onLogin={handleLogin} shopName={settings.shopName} shopLogo={settings.shopLogo} />
           } 
         />
         
-        <Route element={isAuthenticated ? <Layout settings={settings} onLogout={() => setIsAuthenticated(false)} /> : <Navigate to="/login" replace />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/vender" element={<POS settings={settings} onSaleComplete={() => syncWithServer()} />} />
-          <Route path="/estoque" element={<Inventory onUpdate={() => syncWithServer()} />} />
-          <Route path="/vendas" element={<SalesHistory settings={settings} />} />
-          <Route path="/configuracoes" element={<SettingsPage settings={settings} setSettings={setSettings as any} />} />
+        {/* App Routes */}
+        <Route 
+          path="/app" 
+          element={
+            isAuthenticated ? 
+            <Layout settings={settings} onLogout={handleLogout} /> : 
+            <Navigate to="/login" replace />
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="vender" element={<POS settings={settings} onSaleComplete={() => syncWithServer()} />} />
+          <Route path="estoque" element={<Inventory onUpdate={() => syncWithServer()} />} />
+          <Route path="vendas" element={<SalesHistory settings={settings} />} />
+          <Route path="configuracoes" element={<SettingsPage settings={settings} setSettings={setSettings as any} />} />
         </Route>
 
+        {/* Catch all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   );
 };
 

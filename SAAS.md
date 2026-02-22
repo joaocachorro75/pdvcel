@@ -1,4 +1,4 @@
-# SmartPDV - SaaS de PDV Mobile
+# PdvCel - SaaS de PDV Mobile
 
 ## 🎯 Posicionamento
 
@@ -52,7 +52,7 @@ Sistema de ponto de venda 100% mobile, feito para:
 ## 🎨 Identidade Visual
 
 ### Nome do Produto
-**SmartPDV** - Sistema Mobile de Vendas
+**PdvCel** - Sistema Mobile de Vendas
 
 ### Slogan
 "Seu negócio na palma da mão"
