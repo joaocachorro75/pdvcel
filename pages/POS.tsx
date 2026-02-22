@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
@@ -14,7 +13,11 @@ import {
   ShoppingCart,
   ChevronUp,
   Copy,
-  Check
+  Check,
+  MessageCircle,
+  User,
+  Phone,
+  Send
 } from 'lucide-react';
 import { Product, CartItem, Sale, Settings } from '../types';
 
@@ -33,6 +36,10 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
   const [saleResult, setSaleResult] = useState<Sale | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [lastAddedName, setLastAddedName] = useState('');
+  
+  // Buyer info
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerPhone, setBuyerPhone] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('pdv_products');
@@ -107,6 +114,8 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
       total: cartTotal,
       paymentMethod: method,
       timestamp: Date.now(),
+      buyerName: buyerName.trim() || undefined,
+      buyerPhone: buyerPhone.trim() || undefined,
     };
 
     const savedSales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
@@ -132,16 +141,48 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
     if (onSaleComplete) onSaleComplete();
   };
 
+  const generateReceiptText = (sale: Sale) => {
+    const itemsText = sale.items.map(i => `${i.quantity}x ${i.name} - R$ ${(i.price * i.quantity).toFixed(2)}`).join('\n');
+    const buyerText = sale.buyerName ? `\nCLIENTE: ${sale.buyerName}` : '';
+    const phoneText = sale.buyerPhone ? `\nTEL: ${sale.buyerPhone}` : '';
+    
+    return `🧾 *RECIBO - ${settings.shopName}*
+━━━━━━━━━━━━━━━━━
+📋 VENDA: #${sale.id}
+📅 DATA: ${new Date(sale.timestamp).toLocaleString('pt-BR')}${buyerText}${phoneText}
+
+📦 *ITENS:*
+${itemsText}
+━━━━━━━━━━━━━━━━━
+💰 *TOTAL: R$ ${sale.total.toFixed(2)}*
+💳 PGTO: ${sale.paymentMethod.toUpperCase()}
+
+✨ Obrigado pela preferência!`;
+  };
+
   const shareReceipt = () => {
     if (!saleResult) return;
-    const itemsText = saleResult.items.map(i => `${i.quantity}x ${i.name} - R$ ${(i.price * i.quantity).toFixed(2)}`).join('\n');
-    const text = `🧾 RECIBO - ${settings.shopName}\n---------------------------\nVENDA: #${saleResult.id}\nDATA: ${new Date(saleResult.timestamp).toLocaleString()}\n\nITENS:\n${itemsText}\n---------------------------\nTOTAL: R$ ${saleResult.total.toFixed(2)}\nPGTO: ${saleResult.paymentMethod.toUpperCase()}\n\nObrigado pela preferência!`;
+    const text = generateReceiptText(saleResult);
     
     if (navigator.share) {
       navigator.share({ title: `Recibo ${settings.shopName}`, text: text }).catch(console.error);
     } else {
       navigator.clipboard.writeText(text);
       alert('Recibo copiado!');
+    }
+  };
+
+  const sendToWhatsApp = () => {
+    if (!saleResult) return;
+    
+    const text = generateReceiptText(saleResult);
+    const phone = saleResult.buyerPhone?.replace(/\D/g, '') || '';
+    
+    if (phone) {
+      const whatsappUrl = `https://wa.me/55${phone}?text=${encodeURIComponent(text)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      alert('Número do comprador não informado');
     }
   };
 
@@ -174,7 +215,7 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
 
       {/* Lista de Produtos */}
       <div className="flex-1 overflow-y-auto pb-40 custom-scrollbar px-1">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {filteredProducts.map(product => (
             <button
               key={product.id}
@@ -262,11 +303,40 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
         </div>
       )}
 
-      {/* Modal Pagamento */}
+      {/* Modal Pagamento + Dados do Comprador */}
       {isCheckoutModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-t-[40px] p-8 pb-[100px] animate-in slide-in-from-bottom duration-300">
-            <h3 className="text-2xl font-black text-slate-800 mb-6 text-center">Forma de Pagamento</h3>
+          <div className="bg-white w-full max-w-md rounded-t-[40px] p-8 pb-[100px] animate-in slide-in-from-bottom duration-300 overflow-y-auto max-h-[90vh]">
+            <h3 className="text-2xl font-black text-slate-800 mb-4 text-center">Finalizar Venda</h3>
+            
+            {/* Dados do Comprador */}
+            <div className="mb-6 space-y-3">
+              <p className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                <User size={16} /> Dados do Comprador (opcional)
+              </p>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="text"
+                  placeholder="Nome do cliente"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="tel"
+                  placeholder="WhatsApp (com DDD)"
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <p className="text-sm font-bold text-slate-600 mb-3">Forma de Pagamento</p>
             <div className="space-y-3">
               <PaymentButton icon={<QrCode />} label="Gerar QR PIX" color="cyan" onClick={() => initiatePayment('pix')} />
               <PaymentButton icon={<Banknote />} label="Dinheiro" color="emerald" onClick={() => initiatePayment('money')} />
@@ -302,12 +372,17 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
       {/* Recibo Final */}
       {saleResult && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
-          <div className="bg-white w-full max-w-xs rounded-2xl shadow-2xl p-6 text-center relative animate-in zoom-in-95 duration-300">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center relative animate-in zoom-in-95 duration-300">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1">
               {[...Array(8)].map((_, i) => <div key={i} className="w-4 h-4 bg-white rounded-full -mt-2 shadow-sm" />)}
             </div>
             <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
             <h2 className="font-black text-slate-800 uppercase tracking-tighter text-lg leading-tight">{settings.shopName}</h2>
+            
+            {saleResult.buyerName && (
+              <p className="text-sm text-slate-500 mt-1">Cliente: {saleResult.buyerName}</p>
+            )}
+            
             <div className="border-t border-dashed border-slate-200 my-4 py-4 text-left space-y-1.5 font-mono">
               {saleResult.items.map(i => (
                 <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
@@ -320,11 +395,28 @@ const POS: React.FC<POSProps> = ({ settings, onSaleComplete }) => {
               <span>TOTAL</span>
               <span>R$ {saleResult.total.toFixed(2)}</span>
             </div>
+            
             <div className="space-y-3 mt-6">
-              <button onClick={shareReceipt} className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl flex items-center justify-center gap-2 active:scale-95">
+              {saleResult.buyerPhone && (
+                <button 
+                  onClick={sendToWhatsApp}
+                  className="w-full py-4 bg-green-500 text-white font-black rounded-xl flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Send size={20} /> Enviar via WhatsApp
+                </button>
+              )}
+              <button 
+                onClick={shareReceipt} 
+                className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl flex items-center justify-center gap-2 active:scale-95"
+              >
                 <Share2 size={20} /> Compartilhar Recibo
               </button>
-              <button onClick={() => setSaleResult(null)} className="w-full py-3 text-slate-500 font-bold border rounded-xl hover:bg-slate-50">Fechar</button>
+              <button 
+                onClick={() => { setSaleResult(null); setBuyerName(''); setBuyerPhone(''); }} 
+                className="w-full py-3 text-slate-500 font-bold border rounded-xl hover:bg-slate-50"
+              >
+                Nova Venda
+              </button>
             </div>
           </div>
         </div>

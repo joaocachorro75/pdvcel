@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
@@ -9,7 +8,11 @@ import {
   FileText, 
   Share2,
   X,
-  Printer
+  Printer,
+  User,
+  Phone,
+  MessageCircle,
+  Send
 } from 'lucide-react';
 import { Sale, Settings } from '../types';
 
@@ -30,12 +33,33 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
   const filteredSales = useMemo(() => {
     return sales.filter(s => 
       s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase())
+      s.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.buyerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.buyerPhone?.includes(searchTerm)
     );
   }, [sales, searchTerm]);
 
+  const generateReceiptText = (sale: Sale) => {
+    const itemsText = sale.items.map(i => `${i.quantity}x ${i.name} - R$ ${(i.price * i.quantity).toFixed(2)}`).join('\n');
+    const buyerText = sale.buyerName ? `\nCLIENTE: ${sale.buyerName}` : '';
+    const phoneText = sale.buyerPhone ? `\nTEL: ${sale.buyerPhone}` : '';
+    
+    return `🧾 *RECIBO - ${settings.shopName}*
+━━━━━━━━━━━━━━━━━
+📋 VENDA: #${sale.id}
+📅 DATA: ${new Date(sale.timestamp).toLocaleString('pt-BR')}${buyerText}${phoneText}
+
+📦 *ITENS:*
+${itemsText}
+━━━━━━━━━━━━━━━━━
+💰 *TOTAL: R$ ${sale.total.toFixed(2)}*
+💳 PGTO: ${sale.paymentMethod.toUpperCase()}
+
+✨ Obrigado pela preferência!`;
+  };
+
   const shareReceipt = (sale: Sale) => {
-    const text = `Recibo - ${settings.shopName}\nVenda: #${sale.id}\nTotal: R$ ${sale.total.toFixed(2)}\nPagamento: ${sale.paymentMethod.toUpperCase()}\nData: ${new Date(sale.timestamp).toLocaleString()}\n\nObrigado pela preferência!`;
+    const text = generateReceiptText(sale);
     
     if (navigator.share) {
       navigator.share({
@@ -44,117 +68,118 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
       }).catch(console.error);
     } else {
       navigator.clipboard.writeText(text);
-      alert('Recibo copiado para a área de transferência!');
+      alert('Recibo copiado!');
+    }
+  };
+
+  const sendToWhatsApp = (sale: Sale) => {
+    const text = generateReceiptText(sale);
+    const phone = sale.buyerPhone?.replace(/\D/g, '') || '';
+    
+    if (phone) {
+      const whatsappUrl = `https://wa.me/55${phone}?text=${encodeURIComponent(text)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      alert('Número do comprador não informado');
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Histórico de Vendas</h1>
-        <p className="text-slate-500">Acompanhe todas as transações realizadas no PDV.</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+      <div className="p-4 space-y-4 max-w-4xl mx-auto pb-24">
+        <h1 className="text-xl font-black text-slate-800">📊 Histórico de Vendas</h1>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar por ID ou forma de pagamento..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
-            />
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Buscar por ID, cliente ou telefone..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none text-sm"
+          />
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <p className="text-xs text-slate-400 font-bold uppercase">Total de Vendas</p>
+            <p className="text-2xl font-black text-slate-800">{sales.length}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input type="date" className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <p className="text-xs text-slate-400 font-bold uppercase">Faturamento</p>
+            <p className="text-2xl font-black text-emerald-600">R$ {sales.reduce((acc, s) => acc + s.total, 0).toFixed(2)}</p>
+          </div>
+        </div>
+
+        {/* Sales List */}
+        <div className="space-y-3">
+          {filteredSales.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <FileText className="w-16 h-16 mx-auto mb-3 opacity-30" />
+              <p>Nenhuma venda encontrada</p>
             </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                <th className="px-6 py-4">Data/Hora</th>
-                <th className="px-6 py-4">ID da Venda</th>
-                <th className="px-6 py-4">Itens</th>
-                <th className="px-6 py-4">Pagamento</th>
-                <th className="px-6 py-4">Total</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredSales.map(sale => (
-                <tr key={sale.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4 text-sm text-slate-600">
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{new Date(sale.timestamp).toLocaleDateString()}</span>
-                      <span className="text-xs opacity-60">{new Date(sale.timestamp).toLocaleTimeString()}</span>
+          ) : (
+            filteredSales.map(sale => (
+              <div key={sale.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-slate-400">#{sale.id}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                        sale.paymentMethod === 'pix' ? 'bg-cyan-100 text-cyan-600' :
+                        sale.paymentMethod === 'money' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {sale.paymentMethod}
+                      </span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-slate-500">#{sale.id}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
-                    {sale.items.reduce((acc, curr) => acc + curr.quantity, 0)} itens
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      sale.paymentMethod === 'pix' ? 'bg-cyan-100 text-cyan-600' :
-                      sale.paymentMethod === 'money' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      {sale.paymentMethod}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-bold text-slate-800">
-                    R$ {sale.total.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <p className="text-lg font-black text-slate-800 mt-1">R$ {sale.total.toFixed(2)}</p>
+                    <p className="text-xs text-slate-400">{new Date(sale.timestamp).toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setSelectedSale(sale)}
+                      className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    {sale.buyerPhone && (
                       <button 
-                        onClick={() => setSelectedSale(sale)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        onClick={() => sendToWhatsApp(sale)}
+                        className="p-2 bg-green-50 text-green-600 rounded-xl"
                       >
-                        <Eye size={18} />
+                        <Send size={18} />
                       </button>
-                      <button 
-                        onClick={() => shareReceipt(sale)}
-                        className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
-                      >
-                        <Share2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredSales.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
-                    <p className="text-slate-400">Nenhuma venda encontrada.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="p-4 border-t flex items-center justify-between text-slate-500 text-xs font-medium">
-          <span>{filteredSales.length} transações</span>
-          <div className="flex items-center gap-2">
-            <button className="p-1 hover:bg-slate-100 rounded disabled:opacity-30" disabled><ChevronLeft size={18} /></button>
-            <span className="w-8 h-8 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg font-bold">1</span>
-            <button className="p-1 hover:bg-slate-100 rounded disabled:opacity-30" disabled><ChevronRight size={18} /></button>
-          </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Buyer Info */}
+                {(sale.buyerName || sale.buyerPhone) && (
+                  <div className="flex items-center gap-4 pt-3 border-t border-slate-100 text-sm text-slate-500">
+                    {sale.buyerName && (
+                      <span className="flex items-center gap-1">
+                        <User size={14} /> {sale.buyerName}
+                      </span>
+                    )}
+                    {sale.buyerPhone && (
+                      <span className="flex items-center gap-1">
+                        <Phone size={14} /> {sale.buyerPhone}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Sale Detail Modal */}
       {selectedSale && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b flex items-center justify-between bg-slate-50">
+          <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between bg-slate-50 sticky top-0">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Detalhes da Venda</h3>
                 <p className="text-xs text-slate-400 font-mono">#{selectedSale.id}</p>
@@ -165,22 +190,44 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
             </div>
 
             <div className="p-6">
-              <div className="flex items-center gap-4 mb-8">
+              {/* Buyer Info */}
+              {(selectedSale.buyerName || selectedSale.buyerPhone) && (
+                <div className="mb-6 p-4 bg-slate-50 rounded-2xl">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Dados do Comprador</h4>
+                  {selectedSale.buyerName && (
+                    <p className="flex items-center gap-2 text-slate-700 mb-2">
+                      <User size={16} className="text-indigo-500" />
+                      <span className="font-medium">{selectedSale.buyerName}</span>
+                    </p>
+                  )}
+                  {selectedSale.buyerPhone && (
+                    <p className="flex items-center gap-2 text-slate-700">
+                      <Phone size={16} className="text-indigo-500" />
+                      <span className="font-medium">{selectedSale.buyerPhone}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 mb-6">
                 <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl">
                   <FileText size={32} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500 font-medium">{new Date(selectedSale.timestamp).toLocaleString()}</p>
-                  <p className="text-lg font-black text-slate-800">R$ {selectedSale.total.toFixed(2)}</p>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  <p className="text-sm text-slate-500 font-medium">{new Date(selectedSale.timestamp).toLocaleString('pt-BR')}</p>
+                  <p className="text-2xl font-black text-slate-800">R$ {selectedSale.total.toFixed(2)}</p>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    selectedSale.paymentMethod === 'pix' ? 'bg-cyan-100 text-cyan-600' :
+                    selectedSale.paymentMethod === 'money' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
                     {selectedSale.paymentMethod}
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-4 mb-8">
+              <div className="space-y-4 mb-6">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b pb-2">Itens Comprados</h4>
-                <div className="space-y-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                <div className="space-y-3">
                   {selectedSale.items.map(item => (
                     <div key={item.id} className="flex justify-between text-sm">
                       <div className="flex gap-2">
@@ -194,19 +241,27 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
               </div>
 
               <div className="space-y-3">
+                {selectedSale.buyerPhone && (
+                  <button 
+                    onClick={() => sendToWhatsApp(selectedSale)}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all"
+                  >
+                    <Send size={18} />
+                    Enviar via WhatsApp
+                  </button>
+                )}
                 <button 
                   onClick={() => shareReceipt(selectedSale)}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
                 >
                   <Share2 size={18} />
                   Compartilhar
                 </button>
                 <button 
-                  onClick={() => window.print()}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl transition-all"
+                  onClick={() => setSelectedSale(null)}
+                  className="w-full py-3 text-slate-400 font-bold"
                 >
-                  <Printer size={18} />
-                  Imprimir
+                  Fechar
                 </button>
               </div>
             </div>

@@ -61,7 +61,9 @@ async function setupDatabase() {
       total REAL,
       paymentMethod TEXT,
       timestamp INTEGER,
-      items TEXT
+      items TEXT,
+      buyerName TEXT,
+      buyerPhone TEXT
     )
   `);
 
@@ -130,8 +132,8 @@ app.post('/api/db', async (req, res) => {
       await db.run('DELETE FROM sales');
       for (const s of sales) {
         await db.run(
-          'INSERT INTO sales (id, total, paymentMethod, timestamp, items) VALUES (?, ?, ?, ?, ?)',
-          [s.id, s.total, s.paymentMethod, s.timestamp, JSON.stringify(s.items)]
+          'INSERT INTO sales (id, total, paymentMethod, timestamp, items, buyerName, buyerPhone) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [s.id, s.total, s.paymentMethod, s.timestamp, JSON.stringify(s.items), s.buyerName || null, s.buyerPhone || null]
         );
       }
     }
