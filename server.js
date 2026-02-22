@@ -10,7 +10,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'database.sqlite');
+
+// Use persistent data directory if available
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
+
+console.log('Data directory:', DATA_DIR);
+console.log('Database path:', DB_PATH);
 
 app.use(express.json({ limit: '50mb' }));
 
@@ -64,6 +70,7 @@ async function setupDatabase() {
     );
   }
 
+  console.log('Banco de dados inicializado com sucesso!');
   return db;
 }
 
@@ -71,18 +78,23 @@ const dbPromise = setupDatabase();
 
 // Rotas da API
 app.get('/api/db', async (req, res) => {
-  const db = await dbPromise;
-  const settings = await db.get('SELECT * FROM settings WHERE id = 1');
-  const products = await db.all('SELECT * FROM products');
-  const sales = await db.all('SELECT * FROM sales');
-  
-  // Converter a string de itens de volta para objeto
-  const parsedSales = sales.map(s => ({
-    ...s,
-    items: JSON.parse(s.items)
-  }));
+  try {
+    const db = await dbPromise;
+    const settings = await db.get('SELECT * FROM settings WHERE id = 1');
+    const products = await db.all('SELECT * FROM products');
+    const sales = await db.all('SELECT * FROM sales');
+    
+    // Converter a string de itens de volta para objeto
+    const parsedSales = sales.map(s => ({
+      ...s,
+      items: JSON.parse(s.items)
+    }));
 
-  res.json({ settings, products, sales: parsedSales });
+    res.json({ settings, products, sales: parsedSales });
+  } catch (err) {
+    console.error('Erro ao buscar dados:', err);
+    res.status(500).json({ error: 'Erro ao buscar dados' });
+  }
 });
 
 app.post('/api/db', async (req, res) => {
@@ -129,6 +141,11 @@ app.post('/api/db', async (req, res) => {
   }
 });
 
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // Servir arquivos estáticos da pasta dist (build do Vite)
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
@@ -158,7 +175,10 @@ app.use((req, res, next) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor SQL rodando na porta ${PORT}`);
-  console.log('Dist path:', distPath);
-  console.log('Dist exists:', fs.existsSync(distPath));
+  console.log(`=================================`);
+  console.log(`Servidor PDV rodando na porta ${PORT}`);
+  console.log(`Data directory: ${DATA_DIR}`);
+  console.log(`Dist path: ${distPath}`);
+  console.log(`Dist exists: ${fs.existsSync(distPath)}`);
+  console.log(`=================================`);
 });
