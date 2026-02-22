@@ -14,7 +14,8 @@ import {
   TrendingUp,
   DollarSign,
   ShoppingCart,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import { Sale, Settings } from '../types';
 
@@ -134,12 +135,34 @@ ${itemsText}
     month: 'Últimos 30 dias'
   };
 
+  const handleDeleteSale = (saleId: string) => {
+    if (!confirm('Excluir esta venda do histórico?')) return;
+    
+    const updatedSales = sales.filter(s => s.id !== saleId);
+    setSales(updatedSales);
+    localStorage.setItem('pdv_sales', JSON.stringify(updatedSales));
+    setSelectedSale(null);
+  };
+
+  const clearAllSales = () => {
+    if (!confirm('ATENÇÃO: Isso vai apagar TODO o histórico de vendas!\n\nDeseja continuar?')) return;
+    setSales([]);
+    localStorage.setItem('pdv_sales', JSON.stringify([]));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
       <div className="p-4 space-y-4 max-w-4xl mx-auto pb-24">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-black text-slate-800">📊 Histórico</h1>
-        </div>
+          {sales.length > 0 && (
+            <button 
+              onClick={clearAllSales}
+              className="text-xs text-red-500 font-bold px-3 py-2 bg-red-50 rounded-lg"
+            >
+              Limpar Tudo
+            </button>
+          )}
 
         {/* Period Filter */}
         <div className="bg-white p-2 rounded-2xl border border-slate-200 flex gap-1 overflow-x-auto">
@@ -351,6 +374,13 @@ ${itemsText}
                 >
                   <Share2 size={18} />
                   Compartilhar
+                </button>
+                <button 
+                  onClick={() => handleDeleteSale(selectedSale.id)}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-red-500 font-bold border-2 border-red-200 rounded-xl hover:bg-red-50 transition-all"
+                >
+                  <Trash2 size={18} />
+                  Excluir Venda
                 </button>
                 <button 
                   onClick={() => setSelectedSale(null)}
