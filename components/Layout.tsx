@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
@@ -9,22 +8,28 @@ import {
   Settings as SettingsIcon,
   LogOut
 } from 'lucide-react';
-import { Settings } from '../types';
+
+interface Tenant {
+  id: string;
+  shop_name: string;
+  shop_logo: string;
+  plan?: string;
+}
 
 interface LayoutProps {
-  settings: Settings;
+  tenant: Tenant;
   onLogout: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ settings, onLogout }) => {
+const Layout: React.FC<LayoutProps> = ({ tenant, onLogout }) => {
   const location = useLocation();
 
   const menuItems = [
-    { name: 'Início', path: '/', icon: LayoutDashboard },
-    { name: 'Vender', path: '/vender', icon: ShoppingCart },
-    { name: 'Estoque', path: '/estoque', icon: Package },
-    { name: 'Vendas', path: '/vendas', icon: History },
-    { name: 'Ajustes', path: '/configuracoes', icon: SettingsIcon },
+    { name: 'Início', path: '/app', icon: LayoutDashboard },
+    { name: 'Vender', path: '/app/vender', icon: ShoppingCart },
+    { name: 'Estoque', path: '/app/estoque', icon: Package },
+    { name: 'Vendas', path: '/app/vendas', icon: History },
+    { name: 'Ajustes', path: '/app/configuracoes', icon: SettingsIcon },
   ];
 
   return (
@@ -32,9 +37,14 @@ const Layout: React.FC<LayoutProps> = ({ settings, onLogout }) => {
       {/* Header Fixo */}
       <header className="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <img src={settings.shopLogo} alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
+          <img 
+            src={tenant.shop_logo} 
+            alt="Logo" 
+            className="w-8 h-8 rounded-lg object-cover shadow-sm" 
+            onError={e => { (e.target as HTMLImageElement).src = 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png'; }}
+          />
           <span className="font-bold text-slate-800 truncate max-w-[180px] text-sm italic uppercase tracking-tight">
-            {settings.shopName}
+            {tenant.shop_name}
           </span>
         </div>
         <button 
@@ -47,7 +57,7 @@ const Layout: React.FC<LayoutProps> = ({ settings, onLogout }) => {
       </header>
 
       {/* Conteúdo Principal */}
-      <main className="flex-1 p-4 overflow-x-hidden">
+      <main className="flex-1 p-4 overflow-x-hidden overflow-y-auto">
         <Outlet />
       </main>
 

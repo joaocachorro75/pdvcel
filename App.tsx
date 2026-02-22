@@ -3,20 +3,24 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing';
 import SignUp from './pages/SignUp';
 import Login from './pages/Login';
+import SuperAdmin from './pages/SuperAdmin';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POS';
 import Inventory from './pages/Inventory';
 import SalesHistory from './pages/SalesHistory';
 import SettingsPage from './pages/SettingsPage';
 import Layout from './components/Layout';
-import { Product, Sale, Settings } from './types';
 
-const DEFAULT_SETTINGS: Settings = {
-  shopName: 'MEU PDV MODERNO',
-  shopLogo: 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png',
-  adminPassword: 'admin',
-  pixKey: 'seu-pix-aqui@pix.com'
-};
+interface Tenant {
+  id: string;
+  whatsapp: string;
+  shop_name: string;
+  shop_logo: string;
+  pix_key?: string;
+  plan: string;
+  status: string;
+  isSuperAdmin?: boolean;
+}
 
 // Loading Screen Component
 const LoadingScreen: React.FC = () => (
@@ -44,87 +48,42 @@ const LoadingScreen: React.FC = () => (
 );
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const initApp = async () => {
-      // Failsafe: Se em 5 segundos não carregar, libera a tela
+      // Failsafe timeout
       const timeout = setTimeout(() => {
-        if (isLoading) {
-          console.warn("Tempo limite de carregamento atingido.");
-          loadFromLocalStorage();
-          setIsLoading(false);
-        }
-      }, 5000);
+        if (isLoading) setIsLoading(false);
+      }, 3000);
 
       try {
-        // Verificar autenticação
-        const auth = localStorage.getItem('pdv_auth');
-        if (auth) setIsAuthenticated(true);
-
-        const response = await fetch('/api/db');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.settings) setSettings(data.settings);
-          if (data.products) localStorage.setItem('pdv_products', JSON.stringify(data.products));
-          if (data.sales) localStorage.setItem('pdv_sales', JSON.stringify(data.sales));
-        } else {
-          loadFromLocalStorage();
+        const savedTenant = localStorage.getItem('pdv_tenant');
+        if (savedTenant) {
+          const parsed = JSON.parse(savedTenant);
+          setTenant(parsed);
         }
       } catch (error) {
-        console.warn("Servidor inacessível, usando dados locais.");
-        loadFromLocalStorage();
+        console.error("Erro ao carregar sessão");
+        localStorage.removeItem('pdv_tenant');
       } finally {
         clearTimeout(timeout);
         setIsLoading(false);
       }
     };
 
-    const loadFromLocalStorage = () => {
-      const savedSettings = localStorage.getItem('pdv_settings');
-      if (savedSettings) {
-        try {
-          setSettings(JSON.parse(savedSettings));
-        } catch (e) {
-          console.error("Erro ao carregar configurações.");
-        }
-      }
-    };
-
     initApp();
   }, []);
 
-  const syncWithServer = async (updatedSettings?: Settings) => {
-    const currentSettings = updatedSettings || settings;
-    const products = JSON.parse(localStorage.getItem('pdv_products') || '[]');
-    const sales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
-    localStorage.setItem('pdv_settings', JSON.stringify(currentSettings));
-
-    try {
-      await fetch('/api/db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: currentSettings, products, sales })
-      });
-    } catch (error) {
-      console.warn("Erro ao sincronizar com servidor.");
-    }
-  };
-
-  const handleLogin = (password: string) => {
-    if (password === settings.adminPassword) {
-      setIsAuthenticated(true);
-      localStorage.setItem('pdv_auth', 'true');
-      return true;
-    }
-    return false;
+  const handleLogin = (loggedTenant: Tenant) => {
+    setTenant(loggedTenant);
+    localStorage.setItem('pdv_tenant', JSON.stringify(loggedTenant));
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('pdv_auth');
+    setTenant(null);
+    localStorage.removeItem('pdv_tenant');
   };
 
   if (isLoading) return <LoadingScreen />;
@@ -138,9 +97,19 @@ const App: React.FC = () => {
         <Route 
           path="/login" 
           element={
-            isAuthenticated ? 
-            <Navigate to="/app" replace /> : 
-            <Login onLogin={handleLogin} shopName={settings.shopName} shopLogo={settings.shopLogo} />
+            tenant ? 
+            <Navigate to={tenant.isSuperAdmin ? "/superadmin" : "/app"} replace /> : 
+            <Login onLogin={handleLogin} />
+          } 
+        />
+
+        {/* SuperAdmin */}
+        <Route 
+          path="/superadmin" 
+          element={
+            tenant?.isSuperAdmin ? 
+            <SuperAdmin /> : 
+            <Navigate to="/login" replace />
           } 
         />
         
@@ -148,16 +117,16 @@ const App: React.FC = () => {
         <Route 
           path="/app" 
           element={
-            isAuthenticated ? 
-            <Layout settings={settings} onLogout={handleLogout} /> : 
+            tenant && !tenant.isSuperAdmin ? 
+            <Layout tenant={tenant} onLogout={handleLogout} /> : 
             <Navigate to="/login" replace />
           }
         >
           <Route index element={<Dashboard />} />
-          <Route path="vender" element={<POS settings={settings} onSaleComplete={() => syncWithServer()} />} />
-          <Route path="estoque" element={<Inventory onUpdate={() => syncWithServer()} />} />
-          <Route path="vendas" element={<SalesHistory settings={settings} />} />
-          <Route path="configuracoes" element={<SettingsPage settings={settings} setSettings={setSettings as any} />} />
+          <Route path="vender" element={<POS />} />
+          <Route path="estoque" element={<Inventory />} />
+          <Route path="vendas" element={<SalesHistory />} />
+          <Route path="configuracoes" element={<SettingsPage />} />
         </Route>
 
         {/* Catch all */}

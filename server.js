@@ -28,49 +28,88 @@ async function setupDatabase() {
     driver: sqlite3.Database
   });
 
-  // Tabela de Configurações
+  // Tabela de Tenants (Lojas/Assinantes)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      whatsapp TEXT UNIQUE NOT NULL,
+      shop_name TEXT,
+      shop_logo TEXT,
+      password TEXT,
+      pix_key TEXT,
+      plan TEXT DEFAULT 'iniciante',
+      status TEXT DEFAULT 'trial',
+      trial_ends_at INTEGER,
+      created_at INTEGER
+    )
+  `);
+
+  // Tabela de Produtos (por tenant)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT,
+      price REAL,
+      image TEXT,
+      category TEXT,
+      stock INTEGER,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
+  // Tabela de Vendas (por tenant)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      total REAL,
+      paymentMethod TEXT,
+      timestamp INTEGER,
+      items TEXT,
+      buyerName TEXT,
+      buyerPhone TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
+  // Tabela antiga de settings (para migração)
   await db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY,
       shopName TEXT,
       shopLogo TEXT,
       adminPassword TEXT,
-      pixKey TEXT
+      pixKey TEXT,
+      migrated INTEGER DEFAULT 0
     )
   `);
 
-  // Tabela de Produtos
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      price REAL,
-      image TEXT,
-      category TEXT,
-      stock INTEGER
-    )
-  `);
-
-  // Tabela de Vendas
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS sales (
-      id TEXT PRIMARY KEY,
-      total REAL,
-      paymentMethod TEXT,
-      timestamp INTEGER,
-      items TEXT,
-      buyerName TEXT,
-      buyerPhone TEXT
-    )
-  `);
-
-  // Inserir configurações padrão se não existirem
-  const settings = await db.get('SELECT * FROM settings WHERE id = 1');
-  if (!settings) {
+  // Criar SuperAdmin padrão se não existir
+  const superAdmin = await db.get("SELECT * FROM tenants WHERE id = 'superadmin'");
+  if (!superAdmin) {
     await db.run(
-      'INSERT INTO settings (id, shopName, shopLogo, adminPassword, pixKey) VALUES (?, ?, ?, ?, ?)',
-      [1, 'SMART PDV', 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png', 'admin', 'seu-pix@email.com']
+      `INSERT INTO tenants (id, whatsapp, shop_name, shop_logo, password, plan, status, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['superadmin', '00000000000', 'To-Ligado.com', 'https://to-ligado.com/logo.png', 'toligado123', 'superadmin', 'active', Date.now()]
     );
+    console.log('✅ SuperAdmin criado: senha = toligado123');
+  }
+
+  // Migrar dados antigos se existirem
+  const oldSettings = await db.get("SELECT * FROM settings WHERE id = 1");
+  if (oldSettings && !oldSettings.migrated) {
+    const tenantId = 'tenant_' + Date.now();
+    await db.run(
+      `INSERT OR IGNORE INTO tenants (id, whatsapp, shop_name, shop_logo, password, pix_key, plan, status, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, '99999999999', oldSettings.shopName || 'Minha Loja', oldSettings.shopLogo, oldSettings.adminPassword || 'admin', oldSettings.pixKey, 'iniciante', 'active', Date.now()]
+    );
+    // Migrar produtos e vendas
+    await db.run(`UPDATE products SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
+    await db.run(`UPDATE sales SET tenant_id = ? WHERE tenant_id IS NULL`, [tenantId]);
+    await db.run(`UPDATE settings SET migrated = 1 WHERE id = 1`);
+    console.log('✅ Dados antigos migrados para tenant:', tenantId);
   }
 
   console.log('Banco de dados inicializado com sucesso!');
@@ -79,58 +118,164 @@ async function setupDatabase() {
 
 const dbPromise = setupDatabase();
 
-// Rotas da API
-app.get('/api/db', async (req, res) => {
-  try {
-    const db = await dbPromise;
-    const settings = await db.get('SELECT * FROM settings WHERE id = 1');
-    const products = await db.all('SELECT * FROM products');
-    const sales = await db.all('SELECT * FROM sales');
-    
-    // Converter a string de itens de volta para objeto
-    const parsedSales = sales.map(s => ({
-      ...s,
-      items: JSON.parse(s.items)
-    }));
+// ==================== AUTENTICAÇÃO ====================
 
-    res.json({ settings, products, sales: parsedSales });
+// Login - Cliente ou SuperAdmin
+app.post('/api/auth/login', async (req, res) => {
+  const { whatsapp, password } = req.body;
+  const db = await dbPromise;
+
+  try {
+    // Tentar SuperAdmin primeiro
+    if (whatsapp === 'superadmin' || whatsapp === '00000000000') {
+      const admin = await db.get("SELECT * FROM tenants WHERE id = 'superadmin'");
+      if (admin && admin.password === password) {
+        return res.json({
+          success: true,
+          tenant: {
+            id: admin.id,
+            whatsapp: admin.whatsapp,
+            shop_name: admin.shop_name,
+            shop_logo: admin.shop_logo,
+            plan: admin.plan,
+            isSuperAdmin: true
+          }
+        });
+      }
+    }
+
+    // Login normal por WhatsApp
+    const tenant = await db.get('SELECT * FROM tenants WHERE whatsapp = ?', [whatsapp]);
+    if (!tenant) {
+      return res.status(401).json({ error: 'WhatsApp não cadastrado' });
+    }
+    if (tenant.password !== password) {
+      return res.status(401).json({ error: 'Senha incorreta' });
+    }
+    if (tenant.status === 'blocked') {
+      return res.status(403).json({ error: 'Conta bloqueada. Entre em contato com o suporte.' });
+    }
+
+    res.json({
+      success: true,
+      tenant: {
+        id: tenant.id,
+        whatsapp: tenant.whatsapp,
+        shop_name: tenant.shop_name,
+        shop_logo: tenant.shop_logo,
+        pix_key: tenant.pix_key,
+        plan: tenant.plan,
+        status: tenant.status,
+        isSuperAdmin: false
+      }
+    });
   } catch (err) {
-    console.error('Erro ao buscar dados:', err);
+    console.error('Erro no login:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Cadastro - Apenas WhatsApp
+app.post('/api/auth/signup', async (req, res) => {
+  const { whatsapp, shop_name, password } = req.body;
+  const db = await dbPromise;
+
+  if (!whatsapp || !password) {
+    return res.status(400).json({ error: 'WhatsApp e senha são obrigatórios' });
+  }
+
+  try {
+    // Verificar se já existe
+    const existing = await db.get('SELECT * FROM tenants WHERE whatsapp = ?', [whatsapp]);
+    if (existing) {
+      return res.status(400).json({ error: 'Este WhatsApp já está cadastrado' });
+    }
+
+    const tenantId = 'tenant_' + Date.now();
+    const trialEnds = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 dias de trial
+
+    await db.run(
+      `INSERT INTO tenants (id, whatsapp, shop_name, shop_logo, password, pix_key, plan, status, trial_ends_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, whatsapp, shop_name || 'Minha Loja', 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png', password, '', 'iniciante', 'trial', trialEnds, Date.now()]
+    );
+
+    res.json({
+      success: true,
+      tenant: {
+        id: tenantId,
+        whatsapp,
+        shop_name: shop_name || 'Minha Loja',
+        shop_logo: 'https://cdn-icons-png.flaticon.com/512/1162/1162456.png',
+        plan: 'iniciante',
+        status: 'trial'
+      }
+    });
+  } catch (err) {
+    console.error('Erro no cadastro:', err);
+    res.status(500).json({ error: 'Erro ao criar conta' });
+  }
+});
+
+// ==================== DADOS DO TENANT ====================
+
+// Buscar dados do tenant
+app.get('/api/tenant/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const db = await dbPromise;
+
+  try {
+    const tenant = await db.get('SELECT id, whatsapp, shop_name, shop_logo, pix_key, plan, status FROM tenants WHERE id = ?', [tenantId]);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant não encontrado' });
+    }
+
+    const products = await db.all('SELECT * FROM products WHERE tenant_id = ?', [tenantId]);
+    const sales = await db.all('SELECT * FROM sales WHERE tenant_id = ?', [tenantId]);
+
+    res.json({
+      settings: tenant,
+      products,
+      sales: sales.map(s => ({ ...s, items: JSON.parse(s.items) }))
+    });
+  } catch (err) {
+    console.error('Erro ao buscar tenant:', err);
     res.status(500).json({ error: 'Erro ao buscar dados' });
   }
 });
 
-app.post('/api/db', async (req, res) => {
-  const db = await dbPromise;
+// Salvar dados do tenant
+app.post('/api/tenant/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
   const { settings, products, sales } = req.body;
+  const db = await dbPromise;
 
   try {
-    // Inicia uma transação para garantir que tudo ou nada seja salvo
     await db.run('BEGIN TRANSACTION');
 
     if (settings) {
       await db.run(
-        'UPDATE settings SET shopName = ?, shopLogo = ?, adminPassword = ?, pixKey = ? WHERE id = 1',
-        [settings.shopName, settings.shopLogo, settings.adminPassword, settings.pixKey]
+        'UPDATE tenants SET shop_name = ?, shop_logo = ?, pix_key = ? WHERE id = ?',
+        [settings.shop_name, settings.shop_logo, settings.pix_key, tenantId]
       );
     }
 
     if (products) {
-      await db.run('DELETE FROM products');
+      await db.run('DELETE FROM products WHERE tenant_id = ?', [tenantId]);
       for (const p of products) {
         await db.run(
-          'INSERT INTO products (id, name, price, image, category, stock) VALUES (?, ?, ?, ?, ?, ?)',
-          [p.id, p.name, p.price, p.image, p.category, p.stock]
+          'INSERT INTO products (id, tenant_id, name, price, image, category, stock) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [p.id, tenantId, p.name, p.price, p.image, p.category, p.stock]
         );
       }
     }
 
     if (sales) {
-      await db.run('DELETE FROM sales');
+      await db.run('DELETE FROM sales WHERE tenant_id = ?', [tenantId]);
       for (const s of sales) {
         await db.run(
-          'INSERT INTO sales (id, total, paymentMethod, timestamp, items, buyerName, buyerPhone) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [s.id, s.total, s.paymentMethod, s.timestamp, JSON.stringify(s.items), s.buyerName || null, s.buyerPhone || null]
+          'INSERT INTO sales (id, tenant_id, total, paymentMethod, timestamp, items, buyerName, buyerPhone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [s.id, tenantId, s.total, s.paymentMethod, s.timestamp, JSON.stringify(s.items), s.buyerName || null, s.buyerPhone || null]
         );
       }
     }
@@ -140,7 +285,93 @@ app.post('/api/db', async (req, res) => {
   } catch (err) {
     await db.run('ROLLBACK');
     console.error(err);
-    res.status(500).json({ error: 'Erro ao salvar no banco SQL' });
+    res.status(500).json({ error: 'Erro ao salvar' });
+  }
+});
+
+// ==================== SUPERADMIN ====================
+
+// Listar todos os tenants
+app.get('/api/admin/tenants', async (req, res) => {
+  const db = await dbPromise;
+
+  try {
+    const tenants = await db.all('SELECT id, whatsapp, shop_name, shop_logo, plan, status, created_at FROM tenants WHERE id != "superadmin" ORDER BY created_at DESC');
+    res.json({ tenants });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao listar tenants' });
+  }
+});
+
+// Atualizar tenant (SuperAdmin)
+app.put('/api/admin/tenant/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const { shop_name, shop_logo, plan, status, pix_key, password } = req.body;
+  const db = await dbPromise;
+
+  try {
+    const updates = [];
+    const values = [];
+
+    if (shop_name) { updates.push('shop_name = ?'); values.push(shop_name); }
+    if (shop_logo) { updates.push('shop_logo = ?'); values.push(shop_logo); }
+    if (plan) { updates.push('plan = ?'); values.push(plan); }
+    if (status) { updates.push('status = ?'); values.push(status); }
+    if (pix_key !== undefined) { updates.push('pix_key = ?'); values.push(pix_key); }
+    if (password) { updates.push('password = ?'); values.push(password); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'Nada para atualizar' });
+    }
+
+    values.push(tenantId);
+    await db.run(`UPDATE tenants SET ${updates.join(', ')} WHERE id = ?`, values);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao atualizar tenant' });
+  }
+});
+
+// Deletar tenant
+app.delete('/api/admin/tenant/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const db = await dbPromise;
+
+  try {
+    await db.run('DELETE FROM products WHERE tenant_id = ?', [tenantId]);
+    await db.run('DELETE FROM sales WHERE tenant_id = ?', [tenantId]);
+    await db.run('DELETE FROM tenants WHERE id = ?', [tenantId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao deletar tenant' });
+  }
+});
+
+// Estatísticas gerais (SuperAdmin)
+app.get('/api/admin/stats', async (req, res) => {
+  const db = await dbPromise;
+
+  try {
+    const totalTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE id != 'superadmin'");
+    const activeTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE status = 'active' AND id != 'superadmin'");
+    const trialTenants = await db.get("SELECT COUNT(*) as count FROM tenants WHERE status = 'trial' AND id != 'superadmin'");
+    const totalSales = await db.get("SELECT COUNT(*) as count, SUM(total) as revenue FROM sales WHERE tenant_id NOT LIKE 'tenant_%' OR 1=1");
+    const planCounts = await db.all("SELECT plan, COUNT(*) as count FROM tenants WHERE id != 'superadmin' GROUP BY plan");
+
+    res.json({
+      totalTenants: totalTenants.count,
+      activeTenants: activeTenants.count,
+      trialTenants: trialTenants.count,
+      totalSales: totalSales.count || 0,
+      totalRevenue: totalSales.revenue || 0,
+      planCounts
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
   }
 });
 
