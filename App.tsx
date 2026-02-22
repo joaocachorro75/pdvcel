@@ -79,11 +79,16 @@ const App: React.FC = () => {
   const handleLogin = (loggedTenant: Tenant) => {
     setTenant(loggedTenant);
     localStorage.setItem('pdv_tenant', JSON.stringify(loggedTenant));
+    // Se for superadmin logando normalmente, limpa flag de impersonação
+    if (loggedTenant.isSuperAdmin) {
+      localStorage.removeItem('pdv_impersonating');
+    }
   };
 
   const handleLogout = () => {
     setTenant(null);
     localStorage.removeItem('pdv_tenant');
+    localStorage.removeItem('pdv_impersonating');
   };
 
   if (isLoading) return <LoadingScreen />;

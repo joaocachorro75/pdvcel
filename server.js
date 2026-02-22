@@ -335,6 +335,67 @@ app.post('/api/tenant/:tenantId', async (req, res) => {
 
 // ==================== SUPERADMIN ====================
 
+// Tabela de planos
+const DEFAULT_PLANS = [
+  { id: 'iniciante', name: 'Iniciante', price: 29, features: ['1 usuário', 'Até 100 produtos', 'Histórico de 30 dias', 'Relatórios básicos', 'Suporte via chat'] },
+  { id: 'profissional', name: 'Profissional', price: 59, features: ['3 usuários', 'Até 500 produtos', 'Histórico de 90 dias', 'Relatórios avançados', 'Exportação de dados', 'Suporte prioritário'] },
+  { id: 'empresarial', name: 'Empresarial', price: 99, features: ['Usuários ilimitados', 'Produtos ilimitados', 'Histórico ilimitado', 'API de integração', 'Múltiplas lojas', 'Suporte 24/7'] },
+  { id: 'parceiro', name: 'Parceiro', price: 0, features: ['Todos os recursos', 'Gratuito', 'Apenas para parceiros'], hidden: true }
+];
+
+// Listar planos
+app.get('/api/admin/plans', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    await db.exec(`CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, data TEXT)`);
+    let plans = await db.get('SELECT data FROM plans WHERE id = "config"');
+    if (plans) {
+      res.json({ plans: JSON.parse(plans.data) });
+    } else {
+      res.json({ plans: DEFAULT_PLANS });
+    }
+  } catch (err) {
+    res.json({ plans: DEFAULT_PLANS });
+  }
+});
+
+// Salvar planos
+app.post('/api/admin/plans', async (req, res) => {
+  const { plans } = req.body;
+  const db = await dbPromise;
+  try {
+    await db.exec(`CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, data TEXT)`);
+    await db.run(`INSERT OR REPLACE INTO plans (id, data) VALUES (?, ?)`, ['config', JSON.stringify(plans)]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar planos' });
+  }
+});
+
+// Impersonate - SuperAdmin entra como cliente
+app.post('/api/admin/impersonate/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const db = await dbPromise;
+  
+  try {
+    const tenant = await db.get('SELECT id, whatsapp, shop_name, shop_logo, pix_key, plan, status FROM tenants WHERE id = ?', [tenantId]);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
+    res.json({
+      success: true,
+      tenant: {
+        ...tenant,
+        isImpersonating: true,
+        impersonatedBy: 'superadmin'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao impersonar' });
+  }
+});
+
 // Listar todos os tenants
 app.get('/api/admin/tenants', async (req, res) => {
   const db = await dbPromise;
