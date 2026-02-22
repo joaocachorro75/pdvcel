@@ -30,7 +30,7 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/server.js ./
 
 # Reinstala apenas as dependências de produção
-RUN npm install --omit=dev better-sqlite3 sqlite3 express
+RUN npm install --omit=dev better-sqlite3 sqlite3 express axios
 
 # Cria diretório de dados persistente
 RUN mkdir -p /data
