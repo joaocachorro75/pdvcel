@@ -16,9 +16,6 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
 
-// SerpApi key for image search
-const SERPAPI_KEY = 'bdd1941fc76b3f2c424f3ca5d4076bf994e56d2397f37ab0b9b65d1f62449dc3';
-
 console.log('Data directory:', DATA_DIR);
 console.log('Database path:', DB_PATH);
 
@@ -169,14 +166,14 @@ app.get('/api/search-image', async (req, res) => {
       timeout: 8000
     });
 
-    const images = response.data.results?.map((img: any) => ({
+    const images = response.data.results?.map(img => ({
       thumbnail: img.urls?.thumb || img.urls?.small,
       original: img.urls?.regular || img.urls?.full,
       title: img.alt_description || img.description || q
     })) || [];
 
     res.json({ images });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao buscar imagens:', error.message);
     
     // Fallback: usar picsum com seed (sempre funciona)
