@@ -8,11 +8,13 @@ import {
   FileText, 
   Share2,
   X,
-  Printer,
   User,
   Phone,
-  MessageCircle,
-  Send
+  Send,
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  Filter
 } from 'lucide-react';
 import { Sale, Settings } from '../types';
 
@@ -20,24 +22,65 @@ interface SalesHistoryProps {
   settings: Settings;
 }
 
+type FilterPeriod = 'all' | 'today' | 'week' | 'month';
+
 const SalesHistory: React.FC<SalesHistoryProps> = ({ settings }) => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('all');
 
   useEffect(() => {
     const saved = localStorage.getItem('pdv_sales');
     if (saved) setSales(JSON.parse(saved).reverse());
   }, []);
 
+  // Filter sales by period
+  const filteredByPeriod = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    return sales.filter(s => {
+      const saleDate = new Date(s.timestamp);
+      switch (filterPeriod) {
+        case 'today':
+          return saleDate >= today;
+        case 'week':
+          return saleDate >= weekAgo;
+        case 'month':
+          return saleDate >= monthAgo;
+        default:
+          return true;
+      }
+    });
+  }, [sales, filterPeriod]);
+
+  // Search within filtered period
   const filteredSales = useMemo(() => {
-    return sales.filter(s => 
+    return filteredByPeriod.filter(s => 
       s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.buyerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.buyerPhone?.includes(searchTerm)
     );
-  }, [sales, searchTerm]);
+  }, [filteredByPeriod, searchTerm]);
+
+  // Stats for filtered period
+  const stats = useMemo(() => {
+    const totalSales = filteredByPeriod.length;
+    const totalAmount = filteredByPeriod.reduce((acc, s) => acc + s.total, 0);
+    const avgTicket = totalSales > 0 ? totalAmount / totalSales : 0;
+    
+    // Count by payment method
+    const byPayment = filteredByPeriod.reduce((acc, s) => {
+      acc[s.paymentMethod] = (acc[s.paymentMethod] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return { totalSales, totalAmount, avgTicket, byPayment };
+  }, [filteredByPeriod]);
 
   const generateReceiptText = (sale: Sale) => {
     const itemsText = sale.items.map(i => `${i.quantity}x ${i.name} - R$ ${(i.price * i.quantity).toFixed(2)}`).join('\n');
@@ -84,11 +127,74 @@ ${itemsText}
     }
   };
 
+  const periodLabels: Record<FilterPeriod, string> = {
+    all: 'Todo período',
+    today: 'Hoje',
+    week: 'Últimos 7 dias',
+    month: 'Últimos 30 dias'
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
       <div className="p-4 space-y-4 max-w-4xl mx-auto pb-24">
-        <h1 className="text-xl font-black text-slate-800">📊 Histórico de Vendas</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-black text-slate-800">📊 Histórico</h1>
+        </div>
 
+        {/* Period Filter */}
+        <div className="bg-white p-2 rounded-2xl border border-slate-200 flex gap-1 overflow-x-auto">
+          {(['today', 'week', 'month', 'all'] as FilterPeriod[]).map(period => (
+            <button
+              key={period}
+              onClick={() => setFilterPeriod(period)}
+              className={`flex-1 min-w-fit px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+                filterPeriod === period 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              {periodLabels[period]}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center gap-2 mb-1">
+              <ShoppingCart className="w-4 h-4 text-indigo-500" />
+              <p className="text-xs text-slate-400 font-bold uppercase">Vendas</p>
+            </div>
+            <p className="text-2xl font-black text-slate-800">{stats.totalSales}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-emerald-500" />
+              <p className="text-xs text-slate-400 font-bold uppercase">Faturamento</p>
+            </div>
+            <p className="text-2xl font-black text-emerald-600">R$ {stats.totalAmount.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="w-4 h-4 text-blue-500" />
+              <p className="text-xs text-slate-400 font-bold uppercase">Ticket Médio</p>
+            </div>
+            <p className="text-2xl font-black text-blue-600">R$ {stats.avgTicket.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Filter className="w-4 h-4 text-purple-500" />
+              <p className="text-xs text-slate-400 font-bold uppercase">Pagamentos</p>
+            </div>
+            <div className="text-xs font-bold text-slate-600 space-y-0.5">
+              {stats.byPayment.pix > 0 && <p className="text-cyan-600">PIX: {stats.byPayment.pix}</p>}
+              {stats.byPayment.money > 0 && <p className="text-emerald-600">$$: {stats.byPayment.money}</p>}
+              {stats.byPayment.card > 0 && <p className="text-blue-600">Card: {stats.byPayment.card}</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Search */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input 
@@ -100,24 +206,13 @@ ${itemsText}
           />
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200">
-            <p className="text-xs text-slate-400 font-bold uppercase">Total de Vendas</p>
-            <p className="text-2xl font-black text-slate-800">{sales.length}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200">
-            <p className="text-xs text-slate-400 font-bold uppercase">Faturamento</p>
-            <p className="text-2xl font-black text-emerald-600">R$ {sales.reduce((acc, s) => acc + s.total, 0).toFixed(2)}</p>
-          </div>
-        </div>
-
         {/* Sales List */}
         <div className="space-y-3">
           {filteredSales.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <FileText className="w-16 h-16 mx-auto mb-3 opacity-30" />
               <p>Nenhuma venda encontrada</p>
+              <p className="text-sm mt-1">para {periodLabels[filterPeriod].toLowerCase()}</p>
             </div>
           ) : (
             filteredSales.map(sale => (
