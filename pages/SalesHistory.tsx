@@ -128,13 +128,6 @@ ${itemsText}
     }
   };
 
-  const periodLabels: Record<FilterPeriod, string> = {
-    all: 'Todo período',
-    today: 'Hoje',
-    week: 'Últimos 7 dias',
-    month: 'Últimos 30 dias'
-  };
-
   const handleDeleteSale = (saleId: string) => {
     if (!confirm('Excluir esta venda do histórico?')) return;
     
@@ -150,6 +143,13 @@ ${itemsText}
     localStorage.setItem('pdv_sales', JSON.stringify([]));
   };
 
+  const periodLabels: Record<FilterPeriod, string> = {
+    all: 'Todo período',
+    today: 'Hoje',
+    week: 'Últimos 7 dias',
+    month: 'Últimos 30 dias'
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
       <div className="p-4 space-y-4 max-w-4xl mx-auto pb-24">
@@ -163,6 +163,7 @@ ${itemsText}
               Limpar Tudo
             </button>
           )}
+        </div>
 
         {/* Period Filter */}
         <div className="bg-white p-2 rounded-2xl border border-slate-200 flex gap-1 overflow-x-auto">
