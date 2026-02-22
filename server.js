@@ -386,7 +386,7 @@ app.get('/api/admin/stats', async (req, res) => {
     // Calcular MRR previsto (faturamento mensal recorrente)
     const planPrices = { iniciante: 29, profissional: 59, empresarial: 99, parceiro: 0 };
     let mrr = 0;
-    planCounts.forEach((p: any) => {
+    planCounts.forEach(p => {
       if (planPrices[p.plan] !== undefined) {
         mrr += planPrices[p.plan] * p.count;
       }
