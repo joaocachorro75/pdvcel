@@ -21,9 +21,19 @@ import {
 } from 'lucide-react';
 import { Product, CartItem, Sale, Settings } from '../types';
 
+interface TenantSettings {
+  id: string;
+  whatsapp: string;
+  shop_name: string;
+  shop_logo: string;
+  pix_key?: string;
+  plan: string;
+  status: string;
+}
+
 const POS: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -32,6 +42,7 @@ const POS: React.FC = () => {
   const [saleResult, setSaleResult] = useState<Sale | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [lastAddedName, setLastAddedName] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   
   // Buyer info
   const [buyerName, setBuyerName] = useState('');
@@ -54,6 +65,8 @@ const POS: React.FC = () => {
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
     
@@ -152,15 +165,37 @@ const POS: React.FC = () => {
     setIsPixModalOpen(false);
     setIsCartOpenMobile(false);
 
-    if (onSaleComplete) onSaleComplete();
+    // Salvar venda no servidor
+    saveSaleToServer(newSale, updatedProducts);
+  };
+
+  const saveSaleToServer = async (sale: Sale, updatedProducts: Product[]) => {
+    try {
+      const tenantData = localStorage.getItem('pdv_tenant');
+      if (tenantData) {
+        const tenant = JSON.parse(tenantData);
+        const savedSales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
+        await fetch(`/api/tenant/${tenant.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            sales: [...savedSales, sale],
+            products: updatedProducts 
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao salvar venda:', err);
+    }
   };
 
   const generateReceiptText = (sale: Sale) => {
+    const shopName = settings?.shop_name || 'Minha Loja';
     const itemsText = sale.items.map(i => `${i.quantity}x ${i.name} - R$ ${(i.price * i.quantity).toFixed(2)}`).join('\n');
     const buyerText = sale.buyerName ? `\nCLIENTE: ${sale.buyerName}` : '';
     const phoneText = sale.buyerPhone ? `\nTEL: ${sale.buyerPhone}` : '';
     
-    return `🧾 *RECIBO - ${settings.shopName}*
+    return `🧾 *RECIBO - ${shopName}*
 ━━━━━━━━━━━━━━━━━
 📋 VENDA: #${sale.id}
 📅 DATA: ${new Date(sale.timestamp).toLocaleString('pt-BR')}${buyerText}${phoneText}
@@ -172,14 +207,14 @@ ${itemsText}
 💳 PGTO: ${sale.paymentMethod.toUpperCase()}
 
 ✨ Obrigado pela preferência!`;
-  };
+  };;
 
   const shareReceipt = () => {
     if (!saleResult) return;
     const text = generateReceiptText(saleResult);
     
     if (navigator.share) {
-      navigator.share({ title: `Recibo ${settings.shopName}`, text: text }).catch(console.error);
+      navigator.share({ title: `Recibo ${shopName}`, text: text }).catch(console.error);
     } else {
       navigator.clipboard.writeText(text);
       alert('Recibo copiado!');
@@ -200,7 +235,9 @@ ${itemsText}
     }
   };
 
-  const pixQrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126360014BR.GOV.BCB.PIX0114${settings.pixKey}520400005303986540${cartTotal.toFixed(2)}5802BR5913${settings.shopName.slice(0,13)}6008SAO%20PAULO62070503***6304`;
+  const pixKey = settings?.pix_key || '';
+  const shopName = settings?.shop_name || 'Minha Loja';
+  const pixQrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126360014BR.GOV.BCB.PIX0114${pixKey}520400005303986540${cartTotal.toFixed(2)}5802BR5913${shopName.slice(0,13)}6008SAO%20PAULO62070503***6304`;
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] relative">
@@ -391,7 +428,7 @@ ${itemsText}
               {[...Array(8)].map((_, i) => <div key={i} className="w-4 h-4 bg-white rounded-full -mt-2 shadow-sm" />)}
             </div>
             <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
-            <h2 className="font-black text-slate-800 uppercase tracking-tighter text-lg leading-tight">{settings.shopName}</h2>
+            <h2 className="font-black text-slate-800 uppercase tracking-tighter text-lg leading-tight">{settings?.shop_name || 'Minha Loja'}</h2>
             
             {saleResult.buyerName && (
               <p className="text-sm text-slate-500 mt-1">Cliente: {saleResult.buyerName}</p>
