@@ -108,6 +108,24 @@ async function setupDatabase() {
     );
   }
 
+  // Migração: adicionar colunas buyerName e buyerPhone se não existirem
+  try {
+    const salesInfo = await db.all("PRAGMA table_info(sales)");
+    const hasBuyerName = salesInfo.some(col => col.name === 'buyerName');
+    const hasBuyerPhone = salesInfo.some(col => col.name === 'buyerPhone');
+    
+    if (!hasBuyerName) {
+      await db.run('ALTER TABLE sales ADD COLUMN buyerName TEXT');
+      console.log('✅ Coluna buyerName adicionada');
+    }
+    if (!hasBuyerPhone) {
+      await db.run('ALTER TABLE sales ADD COLUMN buyerPhone TEXT');
+      console.log('✅ Coluna buyerPhone adicionada');
+    }
+  } catch (err) {
+    console.log('Aviso: migração de sales:', err.message);
+  }
+
   // Tabela de pagamentos/assinaturas
   await db.exec(`
     CREATE TABLE IF NOT EXISTS subscriptions (
