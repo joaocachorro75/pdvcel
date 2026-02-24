@@ -9,6 +9,7 @@ import {
   LogOut,
   Crown
 } from 'lucide-react';
+import WhatsAppButton from './WhatsAppButton';
 
 interface Tenant {
   id: string;
@@ -118,6 +119,9 @@ const Layout: React.FC<LayoutProps> = ({ tenant, onLogout }) => {
           );
         })}
       </nav>
+
+      {/* Botão flutuante do WhatsApp */}
+      <WhatsAppButton />
     </div>
   );
 };
