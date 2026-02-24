@@ -134,7 +134,7 @@ const POS: React.FC = () => {
     }
   };
 
-  const confirmPayment = (method: 'money' | 'pix' | 'card') => {
+  const confirmPayment = async (method: 'money' | 'pix' | 'card') => {
     const newSale: Sale = {
       id: Math.random().toString(36).substr(2, 9).toUpperCase(),
       items: [...cart],
@@ -145,31 +145,18 @@ const POS: React.FC = () => {
       buyerPhone: buyerPhone.trim() || undefined,
     };
 
-    const savedSales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
-    const updatedSales = [...savedSales, newSale];
-    localStorage.setItem('pdv_sales', JSON.stringify(updatedSales));
-
-    const updatedProducts = products.map(p => {
-      const cartItem = cart.find(c => c.id === p.id);
-      if (cartItem) {
-        return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
-      }
-      return p;
-    });
-    setProducts(updatedProducts);
-    localStorage.setItem('pdv_products', JSON.stringify(updatedProducts));
-
+    // Atualizar estado local imediatamente para UX
     setSaleResult(newSale);
     setCart([]);
     setIsCheckoutModalOpen(false);
     setIsPixModalOpen(false);
     setIsCartOpenMobile(false);
 
-    // Salvar venda no servidor
-    saveSaleToServer(newSale, updatedProducts);
+    // Salvar no servidor (busca dados atuais, atualiza estoque e vendas)
+    await saveSaleToServer(newSale);
   };
 
-  const saveSaleToServer = async (sale: Sale, updatedProducts: Product[]) => {
+  const saveSaleToServer = async (sale: Sale) => {
     try {
       const tenantData = localStorage.getItem('pdv_tenant');
       if (tenantData) {
@@ -180,6 +167,16 @@ const POS: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           const currentSales = data.sales || [];
+          const currentProducts = data.products || [];
+          
+          // Calcular novo estoque baseado nos produtos ATUAIS do servidor
+          const updatedProducts = currentProducts.map(p => {
+            const cartItem = cart.find(c => c.id === p.id);
+            if (cartItem) {
+              return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
+            }
+            return p;
+          });
           
           // Adicionar nova venda
           const allSales = [...currentSales, sale];
@@ -194,9 +191,10 @@ const POS: React.FC = () => {
             })
           });
           
-          // Atualizar localStorage também
-          localStorage.setItem('pdv_sales', JSON.stringify(allSales));
+          // Atualizar estado local e localStorage
+          setProducts(updatedProducts);
           localStorage.setItem('pdv_products', JSON.stringify(updatedProducts));
+          localStorage.setItem('pdv_sales', JSON.stringify(allSales));
         }
       }
     } catch (err) {
