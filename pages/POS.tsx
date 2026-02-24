@@ -43,6 +43,7 @@ const POS: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [lastAddedName, setLastAddedName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Buyer info
   const [buyerName, setBuyerName] = useState('');
