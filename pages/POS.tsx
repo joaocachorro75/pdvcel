@@ -174,15 +174,30 @@ const POS: React.FC = () => {
       const tenantData = localStorage.getItem('pdv_tenant');
       if (tenantData) {
         const tenant = JSON.parse(tenantData);
-        const savedSales = JSON.parse(localStorage.getItem('pdv_sales') || '[]');
-        await fetch(`/api/tenant/${tenant.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            sales: [...savedSales, sale],
-            products: updatedProducts 
-          })
-        });
+        
+        // Buscar dados atuais do servidor
+        const res = await fetch(`/api/tenant/${tenant.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          const currentSales = data.sales || [];
+          
+          // Adicionar nova venda
+          const allSales = [...currentSales, sale];
+          
+          // Salvar no servidor
+          await fetch(`/api/tenant/${tenant.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              sales: allSales,
+              products: updatedProducts 
+            })
+          });
+          
+          // Atualizar localStorage também
+          localStorage.setItem('pdv_sales', JSON.stringify(allSales));
+          localStorage.setItem('pdv_products', JSON.stringify(updatedProducts));
+        }
       }
     } catch (err) {
       console.error('Erro ao salvar venda:', err);
