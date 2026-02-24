@@ -306,7 +306,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const tenantId = 'tenant_' + Date.now();
-    const trialEnds = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 dias de trial
+    const trialEnds = Date.now() + (2 * 24 * 60 * 60 * 1000); // 2 dias de trial
 
     await db.run(
       `INSERT INTO tenants (id, whatsapp, shop_name, shop_logo, password, pix_key, plan, status, trial_ends_at, created_at)

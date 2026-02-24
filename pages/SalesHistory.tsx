@@ -145,13 +145,28 @@ ${itemsText}
     }
   };
 
-  const handleDeleteSale = (saleId: string) => {
+  const handleDeleteSale = async (saleId: string) => {
     if (!confirm('Excluir esta venda do histórico?')) return;
     
     const updatedSales = sales.filter(s => s.id !== saleId);
     setSales(updatedSales);
     localStorage.setItem('pdv_sales', JSON.stringify(updatedSales));
     setSelectedSale(null);
+    
+    // Salvar no servidor também
+    try {
+      const tenantData = localStorage.getItem('pdv_tenant');
+      if (tenantData) {
+        const tenant = JSON.parse(tenantData);
+        await fetch(`/api/tenant/${tenant.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sales: updatedSales })
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao excluir venda do servidor:', err);
+    }
   };
 
   const clearAllSales = () => {

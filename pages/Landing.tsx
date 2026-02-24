@@ -166,7 +166,7 @@ const Landing: React.FC = () => {
               </a>
             </div>
 
-            <p className="text-sm text-slate-400 mt-4">✓ Teste grátis por 7 dias ✓ Sem cartão de crédito</p>
+            <p className="text-sm text-slate-400 mt-4">✓ Teste grátis por 2 dias ✓ Sem cartão de crédito</p>
           </div>
 
           {/* App Preview */}
