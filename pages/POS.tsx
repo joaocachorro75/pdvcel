@@ -237,7 +237,10 @@ ${itemsText}
 
   const pixKey = settings?.pix_key || '';
   const shopName = settings?.shop_name || 'Minha Loja';
-  const pixQrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126360014BR.GOV.BCB.PIX0114${pixKey}520400005303986540${cartTotal.toFixed(2)}5802BR5913${shopName.slice(0,13)}6008SAO%20PAULO62070503***6304`;
+  const hasPixKey = Boolean(pixKey && pixKey.trim() !== '');
+  const pixQrCodeUrl = hasPixKey 
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126360014BR.GOV.BCB.PIX0114${pixKey}520400005303986540${cartTotal.toFixed(2)}5802BR5913${shopName.slice(0,13)}6008SAO%20PAULO62070503***6304`
+    : '';
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] relative">

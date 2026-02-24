@@ -22,10 +22,10 @@ export interface Sale {
 }
 
 export interface Settings {
-  shopName: string;
-  shopLogo: string;
-  adminPassword: string;
-  pixKey: string;
+  shop_name: string;
+  shop_logo: string;
+  pix_key?: string;
+  adminPassword?: string;
 }
 
 export interface DashboardStats {
