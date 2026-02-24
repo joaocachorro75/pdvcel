@@ -318,6 +318,57 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Webhook para sincronizar vendas do site principal
+app.post('/api/sync/order', async (req, res) => {
+  const { order, apiKey } = req.body;
+  
+  // Verificar API key (segurança)
+  if (apiKey !== 'toligado_sync_2026') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    const db = await dbPromise;
+    
+    // Verificar se tenant existe, senão criar
+    let tenant = await db.get('SELECT * FROM tenants WHERE whatsapp = ?', [order.customerWhatsapp]);
+    
+    if (!tenant) {
+      const tenantId = 'tenant_' + Date.now();
+      const trialEnds = Date.now() + (2 * 24 * 60 * 60 * 1000);
+      
+      await db.run(
+        'INSERT INTO tenants (id, whatsapp, shop_name, password, plan, status, trial_ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [tenantId, order.customerWhatsapp, order.customerName || 'Minha Loja', 'mudar123', 'iniciante', 'trial', trialEnds, Date.now()]
+      );
+      
+      tenant = { id: tenantId, whatsapp: order.customerWhatsapp };
+    }
+    
+    res.json({ success: true, tenantId: tenant.id });
+  } catch (err) {
+    console.error('Erro ao sincronizar order:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sincronizar venda com site principal
+async function syncSaleToMainSite(order) {
+  try {
+    await fetch('https://site.to-ligado.com/api/sync/sale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order: order,
+        source: 'pdvcel',
+        apiKey: 'toligado_sync_2026'
+      })
+    });
+  } catch (err) {
+    console.error('Erro ao sincronizar venda com site principal:', err);
+  }
+}
+
 // Cadastro - Apenas WhatsApp
 app.post('/api/auth/signup', async (req, res) => {
   const { whatsapp, shop_name, password } = req.body;
