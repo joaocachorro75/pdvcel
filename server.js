@@ -266,6 +266,35 @@ app.post('/api/auth/login', async (req, res) => {
     if (tenant.password !== password) {
       return res.status(401).json({ error: 'Senha incorreta' });
     }
+    
+    // Verificar se trial expirou
+    if (tenant.status === 'trial' && tenant.trial_ends_at) {
+      if (Date.now() > tenant.trial_ends_at) {
+        // Trial expirado - bloquear conta
+        await db.run('UPDATE tenants SET status = ? WHERE id = ?', ['blocked', tenant.id]);
+        return res.status(403).json({ 
+          error: 'Seu período de teste expirou. Entre em contato para assinar um plano.',
+          trial_expired: true 
+        });
+      }
+    }
+    
+    // Verificar se assinatura venceu (tem subscription pendente e passou da data)
+    if (tenant.status === 'active') {
+      const subscription = await db.get(
+        'SELECT * FROM subscriptions WHERE tenant_id = ? AND status = ? ORDER BY due_date DESC LIMIT 1',
+        [tenant.id, 'pending']
+      );
+      if (subscription && Date.now() > subscription.due_date) {
+        // Assinatura venceu - bloquear conta
+        await db.run('UPDATE tenants SET status = ? WHERE id = ?', ['blocked', tenant.id]);
+        return res.status(403).json({ 
+          error: 'Sua assinatura venceu. Regularize o pagamento para continuar usando.',
+          subscription_expired: true 
+        });
+      }
+    }
+    
     if (tenant.status === 'blocked') {
       return res.status(403).json({ error: 'Conta bloqueada. Entre em contato com o suporte.' });
     }
@@ -558,6 +587,69 @@ app.get('/api/admin/due-tenants', async (req, res) => {
     res.json({ overdue, upcoming });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar vencimentos' });
+  }
+});
+
+// Endpoint para verificação automática de vencimentos (chamado por cron/OpenClaw)
+app.get('/api/admin/check-expirations', async (req, res) => {
+  const db = await dbPromise;
+  try {
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const results = {
+      trialsExpired: [],
+      trialsExpiringSoon: [],
+      subscriptionsExpired: [],
+      subscriptionsExpiringSoon: [],
+      blocked: []
+    };
+    
+    // Trials expirados
+    const trialsExpired = await db.all(
+      'SELECT id, shop_name, whatsapp, trial_ends_at FROM tenants WHERE status = ? AND trial_ends_at < ?',
+      ['trial', now]
+    );
+    for (const t of trialsExpired) {
+      await db.run('UPDATE tenants SET status = ? WHERE id = ?', ['blocked', t.id]);
+      results.trialsExpired.push(t);
+      results.blocked.push({ ...t, reason: 'trial_expired' });
+    }
+    
+    // Trials expirando em 24h
+    const trialsExpiringSoon = await db.all(
+      'SELECT id, shop_name, whatsapp, trial_ends_at FROM tenants WHERE status = ? AND trial_ends_at >= ? AND trial_ends_at <= ?',
+      ['trial', now, now + oneDay]
+    );
+    results.trialsExpiringSoon = trialsExpiringSoon;
+    
+    // Assinaturas vencidas
+    const subsExpired = await db.all(`
+      SELECT s.tenant_id, t.shop_name, t.whatsapp, s.due_date, s.price, s.id as subscription_id
+      FROM subscriptions s
+      JOIN tenants t ON s.tenant_id = t.id
+      WHERE s.status = 'pending' AND s.due_date < ?
+    `, [now]);
+    
+    for (const s of subsExpired) {
+      await db.run('UPDATE tenants SET status = ? WHERE id = ?', ['blocked', s.tenant_id]);
+      results.subscriptionsExpired.push(s);
+      results.blocked.push({ ...s, reason: 'subscription_expired' });
+    }
+    
+    // Assinaturas vencendo em 3 dias
+    const threeDays = 3 * oneDay;
+    const subsExpiringSoon = await db.all(`
+      SELECT s.tenant_id, t.shop_name, t.whatsapp, s.due_date, s.price
+      FROM subscriptions s
+      JOIN tenants t ON s.tenant_id = t.id
+      WHERE s.status = 'pending' AND s.due_date >= ? AND s.due_date <= ?
+    `, [now, now + threeDays]);
+    results.subscriptionsExpiringSoon = subsExpiringSoon;
+    
+    res.json(results);
+  } catch (err) {
+    console.error('Erro ao verificar expirações:', err);
+    res.status(500).json({ error: 'Erro ao verificar expirações' });
   }
 });
 
