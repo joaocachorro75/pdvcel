@@ -66,9 +66,25 @@ const Inventory: React.FC = () => {
     return () => stopCamera();
   }, []);
 
-  const saveToStorage = (newProducts: Product[]) => {
+  const saveToStorage = async (newProducts: Product[]) => {
     setProducts(newProducts);
     localStorage.setItem('pdv_products', JSON.stringify(newProducts));
+    
+    // Salvar no servidor também
+    try {
+      const tenantData = localStorage.getItem('pdv_tenant');
+      if (tenantData) {
+        const tenant = JSON.parse(tenantData);
+        await fetch(`/api/tenant/${tenant.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: newProducts })
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao salvar produtos no servidor:', err);
+    }
+    
     if (onUpdate) onUpdate();
   };
 
